@@ -14,6 +14,8 @@ import {
   View,
 } from 'react-native';
 import { getOrCreateUserId } from '../services/identity';
+import { getNativePushToken } from '../services/notifications';
+import { uploadProfileImage } from '../services/storage';
 import { roomAPI, handleApiError } from '../utils/api';
 
 const COLOR_RED = '#E63946';
@@ -29,6 +31,8 @@ export default function HomeScreen() {
   const [roomCode, setRoomCode] = useState('');
   const [mugshot, setMugshot] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const createInFlightRef = useRef(false);
+  const joinInFlightRef = useRef(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -59,36 +63,57 @@ export default function HomeScreen() {
       quality: 0.5,
       allowsEditing: true,
       aspect: [1, 1],
-      base64: true,
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      setMugshot(result.assets[0].base64 || result.assets[0].uri);
+      setMugshot(result.assets[0].uri);
     }
   };
 
   const createBeef = async () => {
+    if (createInFlightRef.current) {
+      return;
+    }
+
     if (!nickname.trim()) {
       Alert.alert('Error', 'Please enter a nickname');
       return;
     }
 
+    createInFlightRef.current = true;
     setLoading(true);
     try {
       const userId = await getOrCreateUserId();
+      const fcmToken = await getNativePushToken();
 
+      // Create room without participants first (to get roomId)
       const response = await roomAPI.createRoom({
         room_name: `${nickname}'s Party`,
         admin_nickname: nickname,
-        participants: [{
-          user_id: userId,
-          nickname: nickname,
-          pfp_base64: mugshot || '',
-          fcm_token: '',
-        }],
+        participants: [], // Empty initially
       });
 
       const roomId = response.data._id;
+
+      // Upload image to Firebase Storage if present
+      let pfp_url = '';
+      if (mugshot) {
+        try {
+          pfp_url = await uploadProfileImage(roomId, userId, mugshot);
+        } catch (uploadError) {
+          console.error('Failed to upload profile image:', uploadError);
+          // Continue without image if upload fails
+        }
+      }
+
+      // Join the room as first participant with the image URL
+      await roomAPI.joinRoom(roomId, {
+        user_id: userId,
+        nickname: nickname,
+        pfp_url: pfp_url,
+        pfp_base64: '', // Keep for backward compatibility
+        fcm_token: fcmToken || '',
+      });
 
       router.push({
         pathname: '/room-admin',
@@ -96,17 +121,22 @@ export default function HomeScreen() {
           roomId,
           nickname,
           userId,
-          mugshot: mugshot ?? '',
+          mugshot: pfp_url || mugshot || '',
         },
       });
     } catch (error) {
       Alert.alert('Error', handleApiError(error));
     } finally {
+      createInFlightRef.current = false;
       setLoading(false);
     }
   };
 
   const joinBeef = async () => {
+    if (joinInFlightRef.current) {
+      return;
+    }
+
     if (!nickname.trim()) {
       Alert.alert('Error', 'Please enter a nickname');
       return;
@@ -116,15 +146,29 @@ export default function HomeScreen() {
       return;
     }
 
+    joinInFlightRef.current = true;
     setLoading(true);
     try {
       const userId = await getOrCreateUserId();
+      const fcmToken = await getNativePushToken();
+
+      // Upload image to Firebase Storage if present
+      let pfp_url = '';
+      if (mugshot) {
+        try {
+          pfp_url = await uploadProfileImage(roomCode.trim(), userId, mugshot);
+        } catch (uploadError) {
+          console.error('Failed to upload profile image:', uploadError);
+          // Continue without image if upload fails
+        }
+      }
 
       const response = await roomAPI.joinRoom(roomCode.trim(), {
         user_id: userId,
         nickname: nickname,
-        pfp_base64: mugshot || '',
-        fcm_token: '',
+        pfp_url: pfp_url,
+        pfp_base64: '', // Keep for backward compatibility
+        fcm_token: fcmToken || '',
       });
 
       router.push({
@@ -133,12 +177,13 @@ export default function HomeScreen() {
           roomId: roomCode.trim(),
           nickname,
           userId,
-          mugshot: mugshot ?? '',
+          mugshot: pfp_url || mugshot || '',
         },
       });
     } catch (error) {
       Alert.alert('Error', handleApiError(error));
     } finally {
+      joinInFlightRef.current = false;
       setLoading(false);
     }
   };
@@ -163,7 +208,7 @@ export default function HomeScreen() {
             <Pressable style={styles.mugshotContainer} onPress={() => void handleMugshot()}>
               {mugshot ? (
                 <Animated.Image
-                  source={{ uri: mugshot.startsWith('data:') ? mugshot : `data:image/jpeg;base64,${mugshot}` }}
+                  source={{ uri: mugshot }}
                   style={[styles.mugshotImage, { transform: [{ scale: pulseAnim }] }]}
                 />
               ) : (

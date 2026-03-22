@@ -56,6 +56,7 @@ export async function pickImageFromLibrary(): Promise<string | null> {
 }
 
 export async function uploadProfileImage(
+  roomId: string,
   userId: string,
   imageUri: string,
   maxBytes = DEFAULT_MAX_IMAGE_BYTES,
@@ -65,7 +66,7 @@ export async function uploadProfileImage(
   const response = await fetch(compressedUri);
   const blob = await response.blob();
 
-  const imageRef = ref(firebaseStorage, `users/${userId}/profile.jpg`);
+  const imageRef = ref(firebaseStorage, `rooms/${roomId}/${userId}.jpg`);
   await uploadBytes(imageRef, blob, {
     contentType: 'image/jpeg',
   });

@@ -12,6 +12,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { roomAPI, handleApiError } from '../utils/api';
 import { getOrCreateUserId } from '../services/identity';
+import { getNativePushToken } from '../services/notifications';
+import { uploadProfileImage } from '../services/storage';
 
 const COLOR_RED = '#E63946';
 const COLOR_WHITE = '#FFFFFF';
@@ -32,12 +34,25 @@ export default function UserScannerScreen() {
     setLoading(true);
     try {
       const userId = await getOrCreateUserId();
+      const fcmToken = await getNativePushToken();
+
+      // Upload image to Firebase Storage if present
+      let pfp_url = '';
+      if (params.mugshot) {
+        try {
+          pfp_url = await uploadProfileImage(roomId, userId, params.mugshot);
+        } catch (uploadError) {
+          console.error('Failed to upload profile image:', uploadError);
+          // Continue without image if upload fails
+        }
+      }
 
       await roomAPI.joinRoom(roomId, {
         user_id: userId,
         nickname: userNickname,
-        pfp_base64: params.mugshot || '',
-        fcm_token: '',
+        pfp_url: pfp_url,
+        pfp_base64: '', // Keep for backward compatibility
+        fcm_token: fcmToken || '',
       });
 
       router.replace({
@@ -46,6 +61,7 @@ export default function UserScannerScreen() {
           roomId: roomId,
           nickname: userNickname,
           userId: userId,
+          mugshot: pfp_url || params.mugshot || '',
         },
       });
     } catch (error) {

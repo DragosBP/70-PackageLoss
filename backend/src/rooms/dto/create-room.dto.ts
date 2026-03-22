@@ -27,6 +27,11 @@ export class ParticipantDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(2048)
+  pfp_url?: string;
+
+  @IsOptional()
+  @IsString()
   @MaxLength(4096)
   fcm_token?: string;
 

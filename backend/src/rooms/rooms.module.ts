@@ -10,6 +10,7 @@ import {
 import { ChallengeAssignmentService } from './challenge-assignment.service';
 import { ChallengeSchedulerService } from './challenge-scheduler.service';
 import { ChallengeAssignmentController } from './challenge-assignment.controller';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { ChallengeAssignmentController } from './challenge-assignment.controller
       { name: Room.name, schema: RoomSchema },
       { name: Challenge.name, schema: ChallengeSchema },
     ]),
+    NotificationsModule,
   ],
   controllers: [RoomsController, ChallengeAssignmentController],
   providers: [RoomsService, ChallengeAssignmentService, ChallengeSchedulerService],

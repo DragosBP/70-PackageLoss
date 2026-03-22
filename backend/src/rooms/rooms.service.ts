@@ -8,6 +8,7 @@ import { Model, Types } from 'mongoose';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { Room, RoomDocument } from './schemas/room.schema';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class RoomsService {
@@ -15,6 +16,7 @@ export class RoomsService {
 
   constructor(
     @InjectModel(Room.name) private readonly roomModel: Model<RoomDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(createRoomDto: CreateRoomDto): Promise<Room> {
@@ -25,28 +27,26 @@ export class RoomsService {
 
     this.assertTtlLimit(expiresAt);
 
-    // 2. Mapăm participanții (folosind logica ta curată din setup)
-    const participants = (createRoomDto.participants ?? []).map((participant) => ({
-      user_id: participant.user_id,
-      nickname: participant.nickname,
-      pfp_base64: participant.pfp_base64 ?? '',
-      fcm_token: participant.fcm_token ?? '',
-      last_active: participant.last_active
-        ? new Date(participant.last_active)
-        : new Date(),
-    }));
-
-    // 3. Opțional: Dacă array-ul e gol, adăugăm Adminul ca prim participant
-    // Asta te ajută să vezi mereu pe cineva în cameră imediat după creare
-    if (participants.length === 0) {
-      participants.push({
-        user_id: `admin-${Math.random().toString(36).substring(2, 9)}`, // Sau un ID real
-        nickname: createRoomDto.admin_nickname,
-        pfp_base64: '',
-        fcm_token: '',
-        last_active: new Date(),
-      });
-    }
+    // De-duplicate participants by user_id to avoid accidental double inserts.
+    const seenUserIds = new Set<string>();
+    const participants = (createRoomDto.participants ?? [])
+      .filter((participant) => {
+        if (!participant.user_id || seenUserIds.has(participant.user_id)) {
+          return false;
+        }
+        seenUserIds.add(participant.user_id);
+        return true;
+      })
+      .map((participant) => ({
+        user_id: participant.user_id,
+        nickname: participant.nickname,
+        pfp_base64: participant.pfp_base64 ?? '',
+        pfp_url: participant.pfp_url ?? '',
+        fcm_token: participant.fcm_token ?? '',
+        last_active: participant.last_active
+          ? new Date(participant.last_active)
+          : new Date(),
+      }));
 
     const room = new this.roomModel({
       ...createRoomDto,
@@ -83,6 +83,7 @@ export class RoomsService {
         user_id: string;
         nickname: string;
         pfp_base64: string;
+        pfp_url: string;
         fcm_token: string;
         last_active: Date;
       }>;
@@ -113,6 +114,7 @@ export class RoomsService {
           user_id: participant.user_id,
           nickname: participant.nickname,
           pfp_base64: participant.pfp_base64 ?? '',
+          pfp_url: participant.pfp_url ?? '',
           fcm_token: participant.fcm_token ?? '',
           last_active: participant.last_active
             ? new Date(participant.last_active)
@@ -134,9 +136,9 @@ export class RoomsService {
 
   async endRoom(id: string, requestorNickname: string): Promise<Room | null> { // <--- Adaugă '| null' aici
   this.assertValidObjectId(id);
-  
+
   const room = await this.roomModel.findById(id).exec();
-  
+
   if (!room) {
     throw new NotFoundException('Room not found');
   }
@@ -145,6 +147,9 @@ export class RoomsService {
   if (room.admin_nickname !== requestorNickname) {
     throw new BadRequestException('Forbidden: Only the admin can end this party!');
   }
+
+  // Clean up Firebase Storage images before deleting room
+  await this.notificationsService.deleteRoomImages(id);
 
   // Executăm ștergerea
   return this.roomModel.findByIdAndDelete(id).exec();
@@ -209,23 +214,36 @@ export class RoomsService {
       user_id: participantData.user_id,
       nickname: participantData.nickname,
       pfp_base64: participantData.pfp_base64 ?? '',
+      pfp_url: participantData.pfp_url ?? '',
       fcm_token: participantData.fcm_token ?? '',
       last_active: new Date(),
     };
 
-    const room = await this.roomModel
-      .findByIdAndUpdate(
-        id,
-        { $addToSet: { participants: newParticipant } },
+    // Atomic update: only push if user_id doesn't already exist in this room.
+    const updatedRoom = await this.roomModel
+      .findOneAndUpdate(
+        { _id: id, 'participants.user_id': { $ne: user_id } },
+        { $push: { participants: newParticipant } },
         { new: true, runValidators: true },
       )
       .exec();
 
-    if (!room) {
+    if (updatedRoom) {
+      return updatedRoom;
+    }
+
+    // If atomic update did not match, either room doesn't exist or user is already in it.
+    const existingRoom = await this.roomModel.findById(id).exec();
+
+    if (!existingRoom) {
       throw new NotFoundException('Room not found');
     }
 
-    return room;
+    if (existingRoom.participants.some((participant) => participant.user_id === user_id)) {
+      return existingRoom;
+    }
+
+    throw new BadRequestException('Unable to join room');
   }
   
 }

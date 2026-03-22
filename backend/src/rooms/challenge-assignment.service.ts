@@ -12,6 +12,7 @@ import {
   ChallengeDocument,
 } from '../challenges/schemas/challenge.schema';
 import { ParticipantChallengeStatus } from './dto/challenge-assignment.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ChallengeAssignmentService {
@@ -21,6 +22,7 @@ export class ChallengeAssignmentService {
     @InjectModel(Room.name) private readonly roomModel: Model<RoomDocument>,
     @InjectModel(Challenge.name)
     private readonly challengeModel: Model<ChallengeDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -89,6 +91,9 @@ export class ChallengeAssignmentService {
     this.logger.log(
       `Game started for room ${roomId}. Next regeneration at ${nextRegen.toISOString()}`,
     );
+
+    // Send push notifications to all participants
+    await this.sendChallengeNotifications(updatedRoom, challenges);
 
     return updatedRoom;
   }
@@ -193,6 +198,9 @@ export class ChallengeAssignmentService {
     this.logger.log(
       `Successfully regenerated challenges for ${updatedParticipants.length} participants in room ${roomId}`,
     );
+
+    // Send push notifications to all participants
+    await this.sendChallengeNotifications(updatedRoom, challenges);
 
     return updatedRoom;
   }
@@ -382,6 +390,7 @@ export class ChallengeAssignmentService {
         user_id: plainParticipant.user_id,
         nickname: plainParticipant.nickname,
         pfp_base64: plainParticipant.pfp_base64 || '',
+        pfp_url: plainParticipant.pfp_url || '',
         fcm_token: plainParticipant.fcm_token || '',
         last_active: plainParticipant.last_active || new Date(),
         assigned_challenge_id: randomChallenge._id as Types.ObjectId,
@@ -473,5 +482,41 @@ export class ChallengeAssignmentService {
   private getRandomChallenge(challenges: ChallengeDocument[]): ChallengeDocument {
     const randomIndex = Math.floor(Math.random() * challenges.length);
     return challenges[randomIndex];
+  }
+
+  /**
+   * Private helper: Send push notifications to all participants with their new challenges
+   */
+  private async sendChallengeNotifications(
+    room: Room,
+    challenges: ChallengeDocument[],
+  ): Promise<void> {
+    const challengeMap = new Map(
+      challenges.map((c) => [(c._id as Types.ObjectId).toString(), c]),
+    );
+
+    const notificationData = room.participants
+      .filter((p) => p.fcm_token && p.assigned_challenge_id)
+      .map((participant) => {
+        const challenge = challengeMap.get(
+          participant.assigned_challenge_id!.toString(),
+        );
+        const target = room.participants.find(
+          (p) => p.user_id === participant.target_user_id,
+        );
+
+        return {
+          fcmToken: participant.fcm_token,
+          targetNickname: target?.nickname || 'Unknown',
+          challengeTitle: challenge?.title || 'New Challenge',
+          challengeDescription: challenge?.description || '',
+        };
+      });
+
+    if (notificationData.length > 0) {
+      await this.notificationsService.sendBulkChallengeNotifications(
+        notificationData,
+      );
+    }
   }
 }
