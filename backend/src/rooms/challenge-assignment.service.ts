@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { Room, RoomDocument, Participant } from './schemas/room.schema';
 import {
   Challenge,
@@ -29,13 +29,10 @@ export class ChallengeAssignmentService {
    * Admin starts the game - assigns first challenges and starts the 30-minute timer
    */
   async startGame(roomId: string): Promise<Room> {
-    this.logger.log(`Starting game for room ${roomId}`);
+    const cleanRoomId = this.normalizeRoomId(roomId);
+    this.logger.log(`Starting game for room ${cleanRoomId}`);
 
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw new BadRequestException('Invalid room ID');
-    }
-
-    const room = await this.roomModel.findById(roomId).exec();
+    const room = await this.roomModel.findById(cleanRoomId).exec();
     if (!room) {
       throw new NotFoundException('Room not found');
     }
@@ -72,7 +69,7 @@ export class ChallengeAssignmentService {
 
     const updatedRoom = await this.roomModel
       .findByIdAndUpdate(
-        roomId,
+        cleanRoomId,
         {
           participants: updatedParticipants,
           game_started: true,
@@ -89,7 +86,7 @@ export class ChallengeAssignmentService {
     }
 
     this.logger.log(
-      `Game started for room ${roomId}. Next regeneration at ${nextRegen.toISOString()}`,
+      `Game started for room ${cleanRoomId}. Next regeneration at ${nextRegen.toISOString()}`,
     );
 
     // Send push notifications to all participants
@@ -102,13 +99,10 @@ export class ChallengeAssignmentService {
    * Admin stops the game - halts the regeneration timer
    */
   async stopGame(roomId: string): Promise<Room> {
-    this.logger.log(`Stopping game for room ${roomId}`);
+    const cleanRoomId = this.normalizeRoomId(roomId);
+    this.logger.log(`Stopping game for room ${cleanRoomId}`);
 
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw new BadRequestException('Invalid room ID');
-    }
-
-    const room = await this.roomModel.findById(roomId).exec();
+    const room = await this.roomModel.findById(cleanRoomId).exec();
     if (!room) {
       throw new NotFoundException('Room not found');
     }
@@ -119,7 +113,7 @@ export class ChallengeAssignmentService {
 
     const updatedRoom = await this.roomModel
       .findByIdAndUpdate(
-        roomId,
+        cleanRoomId,
         {
           game_started: false,
           next_challenge_regeneration: null,
@@ -132,7 +126,7 @@ export class ChallengeAssignmentService {
       throw new NotFoundException('Room not found after update');
     }
 
-    this.logger.log(`Game stopped for room ${roomId}`);
+    this.logger.log(`Game stopped for room ${cleanRoomId}`);
 
     return updatedRoom;
   }
@@ -141,13 +135,10 @@ export class ChallengeAssignmentService {
    * Main method to regenerate challenges and targets for all participants in a room
    */
   async regenerateChallenges(roomId: string): Promise<Room> {
-    this.logger.log(`Regenerating challenges for room ${roomId}`);
+    const cleanRoomId = this.normalizeRoomId(roomId);
+    this.logger.log(`Regenerating challenges for room ${cleanRoomId}`);
 
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw new BadRequestException('Invalid room ID');
-    }
-
-    const room = await this.roomModel.findById(roomId).exec();
+    const room = await this.roomModel.findById(cleanRoomId).exec();
     if (!room) {
       throw new NotFoundException('Room not found');
     }
@@ -179,7 +170,7 @@ export class ChallengeAssignmentService {
 
     const updatedRoom = await this.roomModel
       .findByIdAndUpdate(
-        roomId,
+        cleanRoomId,
         {
           participants: updatedParticipants,
           last_challenge_regeneration: now,
@@ -194,7 +185,7 @@ export class ChallengeAssignmentService {
     }
 
     this.logger.log(
-      `Successfully regenerated challenges for ${updatedParticipants.length} participants in room ${roomId}`,
+      `Successfully regenerated challenges for ${updatedParticipants.length} participants in room ${cleanRoomId}`,
     );
 
     // Send push notifications to all participants
@@ -207,15 +198,12 @@ export class ChallengeAssignmentService {
    * Mark a user's challenge as completed
    */
   async markChallengeComplete(roomId: string, userId: string): Promise<Room> {
+    const cleanRoomId = this.normalizeRoomId(roomId);
     this.logger.log(
-      `Marking challenge complete for user ${userId} in room ${roomId}`,
+      `Marking challenge complete for user ${userId} in room ${cleanRoomId}`,
     );
 
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw new BadRequestException('Invalid room ID');
-    }
-
-    const room = await this.roomModel.findById(roomId).exec();
+    const room = await this.roomModel.findById(cleanRoomId).exec();
     if (!room) {
       throw new NotFoundException('Room not found');
     }
@@ -232,7 +220,7 @@ export class ChallengeAssignmentService {
 
     const updatedRoom = await this.roomModel
       .findByIdAndUpdate(
-        roomId,
+        cleanRoomId,
         { participants: room.participants },
         { new: true, runValidators: true },
       )
@@ -254,11 +242,9 @@ export class ChallengeAssignmentService {
     roomId: string,
     userId: string,
   ): Promise<ParticipantChallengeStatus> {
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw new BadRequestException('Invalid room ID');
-    }
+    const cleanRoomId = this.normalizeRoomId(roomId);
 
-    const room = await this.roomModel.findById(roomId).exec();
+    const room = await this.roomModel.findById(cleanRoomId).exec();
     if (!room) {
       throw new NotFoundException('Room not found');
     }
@@ -309,11 +295,9 @@ export class ChallengeAssignmentService {
   async getAllChallengeStatuses(
     roomId: string,
   ): Promise<ParticipantChallengeStatus[]> {
-    if (!Types.ObjectId.isValid(roomId)) {
-      throw new BadRequestException('Invalid room ID');
-    }
+    const cleanRoomId = this.normalizeRoomId(roomId);
 
-    const room = await this.roomModel.findById(roomId).exec();
+    const room = await this.roomModel.findById(cleanRoomId).exec();
     if (!room) {
       throw new NotFoundException('Room not found');
     }
@@ -363,6 +347,19 @@ export class ChallengeAssignmentService {
         is_challenge_completed: participant.is_challenge_completed,
       };
     });
+  }
+
+  /**
+   * Rooms in this project use 6-digit string IDs, not Mongo ObjectIds.
+   */
+  private normalizeRoomId(roomId: string): string {
+    const cleanRoomId = roomId.replace(':', '').trim();
+
+    if (!/^\d+$/.test(cleanRoomId)) {
+      throw new BadRequestException('Invalid room ID');
+    }
+
+    return cleanRoomId;
   }
 
   /**
@@ -464,7 +461,7 @@ export class ChallengeAssignmentService {
     challenges: ChallengeDocument[],
   ): Promise<void> {
     const challengeMap = new Map(
-      challenges.map((c) => [(c._id as Types.ObjectId).toString(), c]),
+      challenges.map((c) => [c._id.toString(), c]),
     );
 
     const notificationData = room.participants
