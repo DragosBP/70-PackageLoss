@@ -12,6 +12,7 @@ import {
   ChallengeDocument,
 } from '../challenges/schemas/challenge.schema';
 import { ParticipantChallengeStatus } from './dto/challenge-assignment.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ChallengeAssignmentService {
@@ -21,6 +22,7 @@ export class ChallengeAssignmentService {
     @InjectModel(Room.name) private readonly roomModel: Model<RoomDocument>,
     @InjectModel(Challenge.name)
     private readonly challengeModel: Model<ChallengeDocument>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -90,6 +92,20 @@ export class ChallengeAssignmentService {
       `Game started for room ${roomId}. Next regeneration at ${nextRegen.toISOString()}`,
     );
 
+    // Send FCM notifications to all participants
+    const fcmTokens = updatedRoom.participants
+      .map((p) => p.fcm_token)
+      .filter((t) => t && t.length > 0);
+
+    if (fcmTokens.length > 0) {
+      void this.notificationsService.sendToMultiple(
+        fcmTokens,
+        'Game Started!',
+        'Your first challenge is ready. Check the app!',
+        { roomId, type: 'game_started' },
+      );
+    }
+
     return updatedRoom;
   }
 
@@ -152,9 +168,7 @@ export class ChallengeAssignmentService {
     }
 
     if (!room.participants || room.participants.length === 0) {
-      throw new BadRequestException(
-        'Cannot assign challenges to empty room',
-      );
+      throw new BadRequestException('Cannot assign challenges to empty room');
     }
 
     const challenges = await this.getChallenges();
@@ -194,6 +208,20 @@ export class ChallengeAssignmentService {
       `Successfully regenerated challenges for ${updatedParticipants.length} participants in room ${roomId}`,
     );
 
+    // Send FCM notifications to all participants
+    const fcmTokens = updatedRoom.participants
+      .map((p) => p.fcm_token)
+      .filter((t) => t && t.length > 0);
+
+    if (fcmTokens.length > 0) {
+      void this.notificationsService.sendToMultiple(
+        fcmTokens,
+        'New Challenge!',
+        'A new challenge has been assigned to you.',
+        { roomId, type: 'challenge_regenerated' },
+      );
+    }
+
     return updatedRoom;
   }
 
@@ -201,7 +229,9 @@ export class ChallengeAssignmentService {
    * Mark a user's challenge as completed
    */
   async markChallengeComplete(roomId: string, userId: string): Promise<Room> {
-    this.logger.log(`Marking challenge complete for user ${userId} in room ${roomId}`);
+    this.logger.log(
+      `Marking challenge complete for user ${userId} in room ${roomId}`,
+    );
 
     if (!Types.ObjectId.isValid(roomId)) {
       throw new BadRequestException('Invalid room ID');
@@ -261,14 +291,18 @@ export class ChallengeAssignmentService {
     }
 
     // Fetch the full challenge
-    let assignedChallenge: { _id: string; title: string; description: string } | null = null;
+    let assignedChallenge: {
+      _id: string;
+      title: string;
+      description: string;
+    } | null = null;
     if (participant.assigned_challenge_id) {
       const challenge = await this.challengeModel
         .findById(participant.assigned_challenge_id)
         .exec();
       if (challenge) {
         assignedChallenge = {
-          _id: (challenge._id as Types.ObjectId).toString(),
+          _id: challenge._id.toString(),
           title: challenge.title,
           description: challenge.description,
         };
@@ -316,23 +350,25 @@ export class ChallengeAssignmentService {
       .find({ _id: { $in: challengeIds } })
       .exec();
 
-    const challengeMap = new Map(
-      challenges.map((c) => [(c._id as Types.ObjectId).toString(), c]),
-    );
+    const challengeMap = new Map(challenges.map((c) => [c._id.toString(), c]));
 
     return room.participants.map((participant) => {
       const targetParticipant = room.participants.find(
         (p) => p.user_id === participant.target_user_id,
       );
 
-      let assignedChallenge: { _id: string; title: string; description: string } | null = null;
+      let assignedChallenge: {
+        _id: string;
+        title: string;
+        description: string;
+      } | null = null;
       if (participant.assigned_challenge_id) {
         const challenge = challengeMap.get(
           participant.assigned_challenge_id.toString(),
         );
         if (challenge) {
           assignedChallenge = {
-            _id: (challenge._id as Types.ObjectId).toString(),
+            _id: challenge._id.toString(),
             title: challenge.title,
             description: challenge.description,
           };
@@ -374,9 +410,10 @@ export class ChallengeAssignmentService {
       const randomChallenge = this.getRandomChallenge(challenges);
 
       // Convert Mongoose subdocument to plain object if needed
-      const plainParticipant = typeof (participant as any).toObject === 'function'
-        ? (participant as any).toObject()
-        : { ...participant };
+      const plainParticipant =
+        typeof (participant as any).toObject === 'function'
+          ? (participant as any).toObject()
+          : { ...participant };
 
       return {
         user_id: plainParticipant.user_id,
@@ -384,7 +421,7 @@ export class ChallengeAssignmentService {
         pfp_base64: plainParticipant.pfp_base64 || '',
         fcm_token: plainParticipant.fcm_token || '',
         last_active: plainParticipant.last_active || new Date(),
-        assigned_challenge_id: randomChallenge._id as Types.ObjectId,
+        assigned_challenge_id: randomChallenge._id,
         target_user_id: targetUserIds[index],
         previous_target_id: plainParticipant.target_user_id || null,
         challenge_assigned_at: new Date(),
@@ -394,83 +431,48 @@ export class ChallengeAssignmentService {
   }
 
   /**
-   * Private helper: Shuffle targets using Fisher-Yates with derangement logic
+   * Private helper: Shuffle targets using offset approach
+   * Guarantees no self-targeting by using modular arithmetic
    */
   private shuffleTargets(participants: Participant[]): string[] {
     const n = participants.length;
 
-    if (n === 0) {
-      return [];
-    }
+    if (n === 0) return [];
 
     if (n === 1) {
       this.logger.warn('Only 1 participant - self-targeting unavoidable');
       return [participants[0].user_id];
     }
 
-    if (n === 2) {
-      this.logger.warn('2 participants - mutual targeting');
-      return [participants[1].user_id, participants[0].user_id];
+    // 1. Shuffle the participants array (Fisher-Yates)
+    const shuffled = [...participants];
+    for (let i = n - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
-    const maxRetries = 10;
-    let bestAttempt: string[] = [];
-    let bestConflicts = n;
+    // 2. Pick random offset k in [1, N-1] - guarantees no self-targeting
+    const k = 1 + Math.floor(Math.random() * (n - 1));
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const targetUserIds = [...participants.map((p) => p.user_id)];
-
-      // Fisher-Yates shuffle
-      for (let i = n - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [targetUserIds[i], targetUserIds[j]] = [
-          targetUserIds[j],
-          targetUserIds[i],
-        ];
-      }
-
-      let valid = true;
-      let previousConflicts = 0;
-
-      for (let i = 0; i < n; i++) {
-        if (participants[i].user_id === targetUserIds[i]) {
-          valid = false;
-          break;
-        }
-        if (participants[i].previous_target_id === targetUserIds[i]) {
-          previousConflicts++;
-        }
-      }
-
-      if (previousConflicts < bestConflicts) {
-        bestAttempt = [...targetUserIds];
-        bestConflicts = previousConflicts;
-      }
-
-      if (valid && previousConflicts < n / 2) {
-        return targetUserIds;
-      }
-    }
-
-    // Verify no self-targeting in best attempt
+    // 3. Build target array: user at index i targets user at (i + k) % n
+    const targetUserIds = Array.from<string>({ length: n });
     for (let i = 0; i < n; i++) {
-      if (participants[i].user_id === bestAttempt[i]) {
-        const finalAttempt = [...participants.map((p) => p.user_id)];
-        for (let j = n - 1; j > 0; j--) {
-          const k = Math.floor(Math.random() * (j + 1));
-          [finalAttempt[j], finalAttempt[k]] = [finalAttempt[k], finalAttempt[j]];
-        }
-        return finalAttempt;
-      }
+      const originalIndex = participants.findIndex(
+        (p) => p.user_id === shuffled[i].user_id,
+      );
+      const targetIndex = (i + k) % n;
+      targetUserIds[originalIndex] = shuffled[targetIndex].user_id;
     }
 
-    return bestAttempt;
+    return targetUserIds;
   }
 
   /**
    * Private helper: Get a random challenge
    */
-  private getRandomChallenge(challenges: ChallengeDocument[]): ChallengeDocument {
+  private getRandomChallenge(
+    challenges: ChallengeDocument[],
+  ): ChallengeDocument {
     const randomIndex = Math.floor(Math.random() * challenges.length);
     return challenges[randomIndex];
   }

@@ -19,7 +19,11 @@ import { ChallengeAssignmentController } from './challenge-assignment.controller
     ]),
   ],
   controllers: [RoomsController, ChallengeAssignmentController],
-  providers: [RoomsService, ChallengeAssignmentService, ChallengeSchedulerService],
+  providers: [
+    RoomsService,
+    ChallengeAssignmentService,
+    ChallengeSchedulerService,
+  ],
   exports: [RoomsService, ChallengeAssignmentService],
 })
 export class RoomsModule {}
