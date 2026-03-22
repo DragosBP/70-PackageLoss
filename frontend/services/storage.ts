@@ -57,14 +57,14 @@ async function compressToSize(uri: string, maxBytes: number): Promise<string> {
   return lastResultUri;
 }
 
-export async function pickImageFromLibrary(): Promise<string | null> {
-  const permissions = await ImagePicker.requestMediaLibraryPermissionsAsync();
+export async function takePhotoWithCamera(): Promise<string | null> {
+  const permissions = await ImagePicker.requestCameraPermissionsAsync();
   if (!permissions.granted) {
     return null;
   }
 
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
     quality: 1,
     allowsEditing: true,
     aspect: [1, 1],
@@ -74,7 +74,29 @@ export async function pickImageFromLibrary(): Promise<string | null> {
     return null;
   }
 
-  return result.assets[0].uri;
+  // Compress right away to save memory when rendering in UI
+  return compressToSize(result.assets[0].uri, DEFAULT_MAX_IMAGE_BYTES);
+}
+
+export async function pickImageFromLibrary(): Promise<string | null> {
+  const permissions = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permissions.granted) {
+    return null;
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    quality: 1,
+    allowsEditing: true,
+    aspect: [1, 1],
+  });
+
+  if (result.canceled || result.assets.length === 0) {
+    return null;
+  }
+
+  // Compress right away to save memory when rendering in UI
+  return compressToSize(result.assets[0].uri, DEFAULT_MAX_IMAGE_BYTES);
 }
 
 export async function getProfileImageBase64(

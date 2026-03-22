@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { getOrCreateUserId } from '../services/identity';
 import { getNativePushToken } from '../services/notifications';
-import { getProfileImageBase64 } from '../services/storage';
+import { getProfileImageBase64, takePhotoWithCamera, pickImageFromLibrary } from '../services/storage';
 import { roomAPI, handleApiError } from '../utils/api';
 
 const COLOR_RED = '#E63946';
@@ -52,22 +52,36 @@ export default function HomeScreen() {
     ).start();
   }, [pulseAnim]);
 
-  const handleMugshot = async () => {
-    const permissions = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissions.granted) {
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.5,
-      allowsEditing: true,
-      aspect: [1, 1],
-    });
-
-    if (!result.canceled && result.assets.length > 0) {
-      setMugshot(result.assets[0].uri);
-    }
+  const handleMugshot = () => {
+    Alert.alert(
+      'Profile Picture',
+      'Choose an option',
+      [
+        {
+          text: 'Take Photo',
+          onPress: async () => {
+            const uri = await takePhotoWithCamera();
+            if (uri) {
+              setMugshot(uri);
+            }
+          },
+        },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const uri = await pickImageFromLibrary();
+            if (uri) {
+              setMugshot(uri);
+            }
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const createBeef = async () => {
