@@ -1,98 +1,382 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { getLocalProfile, LocalProfile } from '@/services/profile';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const COLOR_RED = '#E63946';
+const COLOR_WHITE = '#FFFFFF';
+const COLOR_DARK = '#1A1A1A';
+const COLOR_BORDER = '#3A3A3A';
+const COLOR_DIM = '#666666';
+const COLOR_DARKER = '#2A2A2A';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const router = useRouter();
+  const [profile, setProfile] = useState<LocalProfile | null>(null);
+  const [nickname, setNickname] = useState('');
+  const [roomCode, setRoomCode] = useState('');
+  const [mugshot, setMugshot] = useState<string | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  useEffect(() => {
+    let mounted = true;
+
+    const loadProfile = async () => {
+      const localProfile = await getLocalProfile();
+      if (!mounted) {
+        return;
+      }
+
+      if (!localProfile) {
+        router.replace('/onboarding');
+        return;
+      }
+
+      setProfile(localProfile);
+    };
+
+    void loadProfile();
+
+    return () => {
+      mounted = false;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.95,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: false,
+        }),
+      ]),
+    ).start();
+  }, [pulseAnim]);
+
+  const handleMugshot = async () => {
+    const permissions = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissions.granted) {
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 1,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+
+    if (!result.canceled && result.assets.length > 0) {
+      setMugshot(result.assets[0].uri);
+    }
+  };
+
+  const createBeef = () => {
+    if (!nickname.trim()) {
+      return;
+    }
+
+    const code = Math.random().toString(36).substring(2, 7).toUpperCase();
+    router.push({
+      pathname: '/room-admin',
+      params: {
+        room: code,
+        nickname: nickname,
+        mugshot: mugshot ?? '',
+        isAdmin: 'true',
+      },
+    });
+  };
+
+  const joinBeef = () => {
+    if (!nickname.trim() || !roomCode.trim()) {
+      return;
+    }
+
+    router.push({
+      pathname: '/room-user',
+      params: {
+        room: roomCode.toUpperCase(),
+        nickname: nickname,
+        mugshot: mugshot ?? '',
+      },
+    });
+  };
+
+  if (!profile) {
+    return <View style={styles.container} />;
+  }
+
+  return (
+    <LinearGradient
+      colors={['#0F0F0F', '#1A1A1A', '#2A0A0A']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.gradientContainer}>
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.container}>
+        {/* Header / Logo */}
+        <View style={styles.header}>
+          <View style={styles.logoBorder}>
+            <Text style={styles.logoText}>BEEF</Text>
+          </View>
+          <Text style={styles.headerTitle}>Enter The Ring</Text>
+          <Text style={styles.headerSubtitle}>Party Challenge Game</Text>
+        </View>
+
+        {/* Mugshot + Nickname */}
+        <View style={styles.section}>
+          {/* Mugshot */}
+          <Pressable style={styles.mugshotContainer} onPress={() => void handleMugshot()}>
+            {mugshot ? (
+              <Animated.Image
+                source={{ uri: mugshot }}
+                style={[styles.mugshotImage, { transform: [{ scale: pulseAnim }] }]}
+              />
+            ) : (
+              <View style={styles.mugshotPlaceholder}>
+                <Text style={styles.mugshotIcon}>📸</Text>
+                <Text style={styles.mugshotLabel}>Upload Mugshot</Text>
+              </View>
+            )}
+          </Pressable>
+
+          {/* Nickname Input */}
+          <TextInput
+            style={styles.input}
+            placeholder="ENTER NICKNAME"
+            placeholderTextColor="#444"
+            value={nickname}
+            onChangeText={setNickname}
+            maxLength={64}
+          />
+        </View>
+
+        {/* Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>Choose Your Fight</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Create New Beef */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.createButton,
+            { opacity: pressed ? 0.8 : 1 },
+          ]}
+          onPress={() => createBeef()}>
+          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+            <Text style={styles.createButtonText}>⚔ CREATE NEW BEEF</Text>
+          </Animated.View>
+        </Pressable>
+
+        {/* Join Existing */}
+        <View style={styles.joinContainer}>
+          <TextInput
+            style={styles.roomCodeInput}
+            placeholder="ROOM CODE"
+            placeholderTextColor="#444"
+            value={roomCode}
+            onChangeText={(text) => setRoomCode(text.toUpperCase())}
+            maxLength={5}
+          />
+          <Pressable
+            style={({ pressed }) => [
+              styles.joinButton,
+              { opacity: pressed ? 0.8 : 1 },
+            ]}
+            onPress={() => joinBeef()}>
+            <Text style={styles.joinButtonText}>JOIN BEEF</Text>
+          </Pressable>
+        </View>
+
+        {/* Tagline */}
+        <Text style={styles.tagline}>No mercy. No excuses.</Text>
+      </View>
+      </ScrollView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  gradientContainer: {
+    flex: 1,
   },
-  stepContainer: {
-    gap: 8,
+  scrollView: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  container: {
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 40,
+    backgroundColor: 'transparent',
+  },
+  header: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logoBorder: {
+    borderWidth: 4,
+    borderColor: COLOR_RED,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  logoText: {
+    fontFamily: 'System',
+    fontSize: 60,
+    fontWeight: '900',
+    color: COLOR_RED,
+    letterSpacing: 4,
+  },
+  headerTitle: {
+    fontFamily: 'System',
+    fontSize: 32,
+    fontWeight: '700',
+    color: COLOR_WHITE,
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontFamily: 'System',
+    fontSize: 12,
+    color: COLOR_DIM,
+    letterSpacing: 1,
+  },
+  section: {
+    width: '100%',
+    gap: 12,
+    marginBottom: 24,
+  },
+  mugshotContainer: {
+    width: '100%',
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: COLOR_BORDER,
+    backgroundColor: COLOR_DARK,
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mugshotImage: {
+    width: 96,
+    height: 96,
+  },
+  mugshotPlaceholder: {
+    alignItems: 'center',
+  },
+  mugshotIcon: {
+    fontSize: 48,
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  mugshotLabel: {
+    fontFamily: 'System',
+    fontSize: 12,
+    color: COLOR_DIM,
+    letterSpacing: 2,
+  },
+  input: {
+    width: '100%',
+    borderWidth: 2,
+    borderColor: COLOR_BORDER,
+    backgroundColor: COLOR_DARK,
+    color: COLOR_WHITE,
+    fontFamily: 'System',
+    fontSize: 18,
+    letterSpacing: 3,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  divider: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLOR_DARKER,
+  },
+  dividerText: {
+    fontFamily: 'System',
+    fontSize: 10,
+    color: '#444',
+    letterSpacing: 2,
+  },
+  createButton: {
+    width: '100%',
+    backgroundColor: COLOR_RED,
+    paddingVertical: 20,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  createButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'System',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 3,
+  },
+  joinContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  roomCodeInput: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: COLOR_BORDER,
+    backgroundColor: COLOR_DARK,
+    color: COLOR_WHITE,
+    fontFamily: 'System',
+    fontSize: 18,
+    letterSpacing: 5,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    textAlign: 'center',
+  },
+  joinButton: {
+    borderWidth: 2,
+    borderColor: COLOR_BORDER,
+    backgroundColor: COLOR_DARKER,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  joinButtonText: {
+    color: COLOR_WHITE,
+    fontFamily: 'System',
+    fontWeight: '700',
+    fontSize: 14,
+    letterSpacing: 2,
+  },
+  tagline: {
+    fontFamily: 'System',
+    fontSize: 10,
+    color: '#333',
+    letterSpacing: 2,
+    marginTop: 40,
   },
 });
