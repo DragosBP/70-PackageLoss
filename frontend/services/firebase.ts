@@ -20,3 +20,7 @@ function getFirebaseApp(): FirebaseApp {
 
 export const firebaseApp = getFirebaseApp();
 export const firebaseStorage: FirebaseStorage = getStorage(firebaseApp);
+export const firebaseStorageFallback: FirebaseStorage = getStorage(
+  firebaseApp,
+  `gs://${firebaseConfig.projectId}.appspot.com`,
+);

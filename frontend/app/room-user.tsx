@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
 import { getOrCreateUserId } from '../services/identity';
+import { scheduleLocalChallengeAssignedNotification } from '../services/notifications';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 
 const COLOR_RED = '#E63946';
@@ -38,6 +39,7 @@ export default function RoomUserScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
+  const lastChallengeKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const initUserId = async () => {
@@ -58,12 +60,35 @@ export default function RoomUserScreen() {
       if (response.data.game_started) {
         try {
           const statusResponse = await roomAPI.getChallengeStatus(params.roomId, userId);
-          setChallengeStatus(statusResponse.data);
+          const nextStatus = statusResponse.data;
+          const challengeId = nextStatus.assigned_challenge?._id;
+          const challengeAssignedAt = nextStatus.challenge_assigned_at;
+          const nextChallengeKey = challengeId && challengeAssignedAt
+            ? `${challengeId}:${challengeAssignedAt}`
+            : null;
+
+          if (nextChallengeKey && lastChallengeKeyRef.current && nextChallengeKey !== lastChallengeKeyRef.current) {
+            void scheduleLocalChallengeAssignedNotification({
+              challengeTitle: nextStatus.assigned_challenge?.title,
+              challengeDescription: nextStatus.assigned_challenge?.description,
+              targetNickname: nextStatus.target_nickname || undefined,
+            });
+          }
+
+          if (nextChallengeKey && !lastChallengeKeyRef.current) {
+            lastChallengeKeyRef.current = nextChallengeKey;
+          } else if (nextChallengeKey) {
+            lastChallengeKeyRef.current = nextChallengeKey;
+          }
+
+          setChallengeStatus(nextStatus);
         } catch {
           setChallengeStatus(null);
+          lastChallengeKeyRef.current = null;
         }
       } else {
         setChallengeStatus(null);
+        lastChallengeKeyRef.current = null;
       }
     } catch (error) {
       console.error('Error fetching room data:', error);

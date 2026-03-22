@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { getOrCreateUserId } from '../services/identity';
 import { getNativePushToken } from '../services/notifications';
-import { uploadProfileImage } from '../services/storage';
+import { getProfileImageBase64, uploadProfileImage } from '../services/storage';
 import { roomAPI, handleApiError } from '../utils/api';
 
 const COLOR_RED = '#E63946';
@@ -97,12 +97,17 @@ export default function HomeScreen() {
 
       // Upload image to Firebase Storage if present
       let pfp_url = '';
+      let pfp_base64 = '';
       if (mugshot) {
         try {
           pfp_url = await uploadProfileImage(roomId, userId, mugshot);
         } catch (uploadError) {
           console.error('Failed to upload profile image:', uploadError);
-          // Continue without image if upload fails
+          try {
+            pfp_base64 = await getProfileImageBase64(mugshot);
+          } catch (base64Error) {
+            console.error('Failed to generate base64 profile image fallback:', base64Error);
+          }
         }
       }
 
@@ -111,7 +116,7 @@ export default function HomeScreen() {
         user_id: userId,
         nickname: nickname,
         pfp_url: pfp_url,
-        pfp_base64: '', // Keep for backward compatibility
+        pfp_base64,
         fcm_token: fcmToken || '',
       });
 
@@ -121,7 +126,7 @@ export default function HomeScreen() {
           roomId,
           nickname,
           userId,
-          mugshot: pfp_url || mugshot || '',
+          mugshot: pfp_url || pfp_base64 || mugshot || '',
         },
       });
     } catch (error) {
@@ -154,12 +159,17 @@ export default function HomeScreen() {
 
       // Upload image to Firebase Storage if present
       let pfp_url = '';
+      let pfp_base64 = '';
       if (mugshot) {
         try {
           pfp_url = await uploadProfileImage(roomCode.trim(), userId, mugshot);
         } catch (uploadError) {
           console.error('Failed to upload profile image:', uploadError);
-          // Continue without image if upload fails
+          try {
+            pfp_base64 = await getProfileImageBase64(mugshot);
+          } catch (base64Error) {
+            console.error('Failed to generate base64 profile image fallback:', base64Error);
+          }
         }
       }
 
@@ -167,7 +177,7 @@ export default function HomeScreen() {
         user_id: userId,
         nickname: nickname,
         pfp_url: pfp_url,
-        pfp_base64: '', // Keep for backward compatibility
+        pfp_base64,
         fcm_token: fcmToken || '',
       });
 
@@ -177,7 +187,7 @@ export default function HomeScreen() {
           roomId: roomCode.trim(),
           nickname,
           userId,
-          mugshot: pfp_url || mugshot || '',
+          mugshot: pfp_url || pfp_base64 || mugshot || '',
         },
       });
     } catch (error) {
