@@ -12,6 +12,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { roomAPI, handleApiError, Room } from '../utils/api';
 import { getOrCreateUserId } from '../services/identity';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 
 const COLOR_RED = '#E63946';
 const COLOR_GREEN = '#34C759';
@@ -20,20 +21,6 @@ const COLOR_DARK = '#1A1A1A';
 const COLOR_BORDER = '#3A3A3A';
 const COLOR_DIM = '#666666';
 const COLOR_DARKER = '#2A2A2A';
-
-// Helper for cross-platform confirmation
-const confirmAction = (title: string, message: string, onConfirm: () => void) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm(`${title}\n\n${message}`)) {
-      onConfirm();
-    }
-  } else {
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', style: 'destructive', onPress: onConfirm },
-    ]);
-  }
-};
 
 export default function RoomLobbyScreen() {
   const router = useRouter();
@@ -45,6 +32,11 @@ export default function RoomLobbyScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Modal states
+  const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
+  const [startGameConfirmVisible, setStartGameConfirmVisible] = useState(false);
+  const [endPartyConfirmVisible, setEndPartyConfirmVisible] = useState(false);
 
   useEffect(() => {
     const initUserId = async () => {
@@ -85,13 +77,14 @@ export default function RoomLobbyScreen() {
       )
     : false;
 
-  const handleStartChallenge = async () => {
+  const handleStartGame = async () => {
     if (!roomId) return;
     setActionLoading(true);
     try {
       await roomAPI.startGame(roomId);
       await fetchRoomData();
-      Alert.alert('Success', 'Game started!');
+      setStartGameConfirmVisible(false);
+      // Success - game has started, modal will automatically close
     } catch (error) {
       Alert.alert('Error', handleApiError(error));
     } finally {
@@ -101,21 +94,28 @@ export default function RoomLobbyScreen() {
 
   const handleLeaveRoom = async () => {
     if (!roomId || !userId) return;
-    confirmAction(
-      'Leave Room',
-      'Are you sure you want to leave?',
-      async () => {
-        setActionLoading(true);
-        try {
-          await roomAPI.leaveRoom(roomId, userId);
-          router.replace('/');
-        } catch (error) {
-          Alert.alert('Error', handleApiError(error));
-        } finally {
-          setActionLoading(false);
-        }
-      }
-    );
+    setActionLoading(true);
+    try {
+      await roomAPI.leaveRoom(roomId, userId);
+      setLeaveConfirmVisible(false);
+      router.replace('/');
+    } catch (error) {
+      Alert.alert('Error', handleApiError(error));
+      setActionLoading(false);
+    }
+  };
+
+  const handleEndParty = async () => {
+    if (!roomId || !room) return;
+    setActionLoading(true);
+    try {
+      await roomAPI.endRoom(roomId, room.admin_nickname);
+      setEndPartyConfirmVisible(false);
+      router.replace('/');
+    } catch (error) {
+      Alert.alert('Error', handleApiError(error));
+      setActionLoading(false);
+    }
   };
 
   if (loading) {
@@ -184,7 +184,10 @@ export default function RoomLobbyScreen() {
         {isAdmin && !room.game_started && (
           <Pressable
             style={[styles.button, styles.startButton]}
-            onPress={handleStartChallenge}
+            onPress={() => {
+              console.log('Start Game button pressed');
+              setStartGameConfirmVisible(true);
+            }}
             disabled={actionLoading}>
             {actionLoading ? (
               <ActivityIndicator color={COLOR_WHITE} />
@@ -193,13 +196,67 @@ export default function RoomLobbyScreen() {
             )}
           </Pressable>
         )}
+        {isAdmin && room.game_started && (
+          <Pressable
+            style={[styles.button, styles.endButton]}
+            onPress={() => {
+              console.log('End Party button pressed');
+              setEndPartyConfirmVisible(true);
+            }}
+            disabled={actionLoading}>
+            <Text style={styles.buttonText}>End Party</Text>
+          </Pressable>
+        )}
         <Pressable
           style={[styles.button, styles.leaveButton]}
-          onPress={handleLeaveRoom}
+          onPress={() => {
+            console.log('Leave Room button pressed');
+            setLeaveConfirmVisible(true);
+          }}
           disabled={actionLoading}>
           <Text style={styles.buttonText}>Leave Room</Text>
         </Pressable>
       </View>
+
+      {/* Modals */}
+      <ConfirmationModal
+        visible={startGameConfirmVisible}
+        title="Start Game"
+        message="Are you ready to start the game? All participants will receive their first challenge."
+        confirmText="Start Game"
+        cancelText="Cancel"
+        isDangerous={false}
+        isLoading={actionLoading}
+        icon="⚔️"
+        onConfirm={handleStartGame}
+        onCancel={() => setStartGameConfirmVisible(false)}
+      />
+
+      <ConfirmationModal
+        visible={leaveConfirmVisible}
+        title="Leave Room"
+        message="Are you sure you want to leave this party? You won't be able to rejoin."
+        confirmText="Leave"
+        cancelText="Stay"
+        isDangerous={true}
+        isLoading={actionLoading}
+        icon="👋"
+        onConfirm={handleLeaveRoom}
+        onCancel={() => setLeaveConfirmVisible(false)}
+      />
+
+      <ConfirmationModal
+        visible={endPartyConfirmVisible}
+        title="End Party"
+        message="Are you sure you want to end the party? This will close the room for all participants."
+        confirmText="End Party"
+        cancelText="Cancel"
+        isDangerous={true}
+        isLoading={actionLoading}
+        icon="⏹️"
+        onConfirm={handleEndParty}
+        onCancel={() => setEndPartyConfirmVisible(false)}
+      />
     </View>
   );
 }
@@ -309,6 +366,9 @@ const styles = StyleSheet.create({
   },
   startButton: {
     backgroundColor: COLOR_GREEN,
+  },
+  endButton: {
+    backgroundColor: COLOR_RED,
   },
   leaveButton: {
     backgroundColor: COLOR_RED,

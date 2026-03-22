@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
 import { getOrCreateUserId } from '../services/identity';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 
 const COLOR_RED = '#E63946';
 const COLOR_GREEN = '#34C759';
@@ -22,20 +23,6 @@ const COLOR_BORDER = '#3A3A3A';
 const COLOR_DIM = '#666666';
 const COLOR_DARKER = '#2A2A2A';
 const COLOR_GOLD = '#FFD700';
-
-// Helper for cross-platform confirmation
-const confirmAction = (title: string, message: string, onConfirm: () => void) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm(`${title}\n\n${message}`)) {
-      onConfirm();
-    }
-  } else {
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', style: 'destructive', onPress: onConfirm },
-    ]);
-  }
-};
 
 export default function RoomUserScreen() {
   const router = useRouter();
@@ -50,6 +37,7 @@ export default function RoomUserScreen() {
   const [userId, setUserId] = useState<string | null>(params.userId || null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [leaveConfirmVisible, setLeaveConfirmVisible] = useState(false);
 
   useEffect(() => {
     const initUserId = async () => {
@@ -108,21 +96,15 @@ export default function RoomUserScreen() {
 
   const handleLeaveRoom = async () => {
     if (!params.roomId || !userId) return;
-    confirmAction(
-      'Leave Room',
-      'Are you sure you want to leave this party?',
-      async () => {
-        setActionLoading(true);
-        try {
-          await roomAPI.leaveRoom(params.roomId, userId);
-          router.replace('/');
-        } catch (error) {
-          Alert.alert('Error', handleApiError(error));
-        } finally {
-          setActionLoading(false);
-        }
-      }
-    );
+    setActionLoading(true);
+    try {
+      await roomAPI.leaveRoom(params.roomId, userId);
+      setLeaveConfirmVisible(false);
+      router.replace('/');
+    } catch (error) {
+      Alert.alert('Error', handleApiError(error));
+      setActionLoading(false);
+    }
   };
 
   if (loading) {
@@ -262,13 +244,27 @@ export default function RoomUserScreen() {
 
         <Pressable
           style={styles.leaveButton}
-          onPress={handleLeaveRoom}
+          onPress={() => setLeaveConfirmVisible(true)}
           disabled={actionLoading}>
           <Text style={styles.leaveButtonText}>🚪 LEAVE PARTY</Text>
         </Pressable>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Leave Party Confirmation Modal */}
+      <ConfirmationModal
+        visible={leaveConfirmVisible}
+        title="Leave Party"
+        message="Are you sure you want to leave this party? You won't be able to rejoin."
+        confirmText="Leave"
+        cancelText="Stay"
+        isDangerous={true}
+        isLoading={actionLoading}
+        icon="👋"
+        onConfirm={handleLeaveRoom}
+        onCancel={() => setLeaveConfirmVisible(false)}
+      />
     </SafeAreaView>
   );
 }
