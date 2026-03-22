@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
 
 export type RoomDocument = HydratedDocument<Room>;
 
@@ -19,6 +19,21 @@ export class Participant {
 
   @Prop({ default: Date.now })
   last_active: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'Challenge', default: null })
+  assigned_challenge_id: Types.ObjectId | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  target_user_id: string | null;
+
+  @Prop({ type: String, trim: true, default: null })
+  previous_target_id: string | null;
+
+  @Prop({ type: Date, default: null })
+  challenge_assigned_at: Date | null;
+
+  @Prop({ default: false })
+  is_challenge_completed: boolean;
 }
 
 export const ParticipantSchema = SchemaFactory.createForClass(Participant);
@@ -42,6 +57,19 @@ export class Room {
 
   @Prop({ type: [String], default: [] })
   active_alerts: string[];
+
+  // Game timer fields for per-room challenge regeneration
+  @Prop({ default: false })
+  game_started: boolean;
+
+  @Prop({ type: Date, default: null })
+  game_started_at: Date | null;
+
+  @Prop({ type: Date, default: null })
+  last_challenge_regeneration: Date | null;
+
+  @Prop({ type: Date, default: null })
+  next_challenge_regeneration: Date | null;
 }
 
 export const RoomSchema = SchemaFactory.createForClass(Room);
