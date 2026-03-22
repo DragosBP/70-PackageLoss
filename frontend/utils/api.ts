@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // TODO: Update this with your backend URL
 // For development, use your local IP: http://192.168.x.x:3000
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.40.4.91:3000';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
+import { ConfirmationModal } from '../components/ConfirmationModal';
 
 const COLOR_RED = '#E63946';
 const COLOR_GREEN = '#34C759';
@@ -21,20 +22,6 @@ const COLOR_DARK = '#1A1A1A';
 const COLOR_BORDER = '#3A3A3A';
 const COLOR_DIM = '#666666';
 const COLOR_DARKER = '#2A2A2A';
-
-// Helper for cross-platform confirmation
-const confirmAction = (title: string, message: string, onConfirm: () => void) => {
-  if (Platform.OS === 'web') {
-    if (window.confirm(`${title}\n\n${message}`)) {
-      onConfirm();
-    }
-  } else {
-    Alert.alert(title, message, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Confirm', style: 'destructive', onPress: onConfirm },
-    ]);
-  }
-};
 
 export default function RoomAdminScreen() {
   const router = useRouter();
@@ -49,6 +36,12 @@ export default function RoomAdminScreen() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [showQR, setShowQR] = useState(false);
+
+  // Modal states
+  const [startGameConfirmVisible, setStartGameConfirmVisible] = useState(false);
+  const [stopGameConfirmVisible, setStopGameConfirmVisible] = useState(false);
+  const [endPartyConfirmVisible, setEndPartyConfirmVisible] = useState(false);
+  const [regenerateChallengesConfirmVisible, setRegenerateChallengesConfirmVisible] = useState(false);
 
   const fetchRoomData = useCallback(async () => {
     if (!roomId) return;
@@ -79,7 +72,7 @@ export default function RoomAdminScreen() {
     try {
       await roomAPI.startGame(roomId);
       await fetchRoomData();
-      Alert.alert('Success', 'Game started! Challenges have been assigned.');
+      setStartGameConfirmVisible(false);
     } catch (error) {
       Alert.alert('Error', handleApiError(error));
     } finally {
@@ -93,7 +86,7 @@ export default function RoomAdminScreen() {
     try {
       await roomAPI.stopGame(roomId);
       await fetchRoomData();
-      Alert.alert('Success', 'Game stopped.');
+      setStopGameConfirmVisible(false);
     } catch (error) {
       Alert.alert('Error', handleApiError(error));
     } finally {
@@ -103,21 +96,15 @@ export default function RoomAdminScreen() {
 
   const handleEndParty = async () => {
     if (!roomId || !nickname) return;
-    confirmAction(
-      'End Party',
-      'Are you sure you want to end this party? This cannot be undone.',
-      async () => {
-        setActionLoading(true);
-        try {
-          await roomAPI.endRoom(roomId, nickname as string);
-          router.replace('/');
-        } catch (error) {
-          Alert.alert('Error', handleApiError(error));
-        } finally {
-          setActionLoading(false);
-        }
-      }
-    );
+    setActionLoading(true);
+    try {
+      await roomAPI.endRoom(roomId, nickname as string);
+      setEndPartyConfirmVisible(false);
+      router.replace('/');
+    } catch (error) {
+      Alert.alert('Error', handleApiError(error));
+      setActionLoading(false);
+    }
   };
 
   const handleRegenerateChallenges = async () => {
@@ -126,7 +113,7 @@ export default function RoomAdminScreen() {
     try {
       await roomAPI.regenerateChallenges(roomId);
       await fetchRoomData();
-      Alert.alert('Success', 'Challenges regenerated!');
+      setRegenerateChallengesConfirmVisible(false);
     } catch (error) {
       Alert.alert('Error', handleApiError(error));
     } finally {
@@ -243,7 +230,7 @@ export default function RoomAdminScreen() {
           {!room.game_started ? (
             <Pressable
               style={[styles.actionButton, styles.startButton]}
-              onPress={handleStartGame}
+              onPress={() => setStartGameConfirmVisible(true)}
               disabled={actionLoading}>
               {actionLoading ? (
                 <ActivityIndicator color={COLOR_WHITE} />
@@ -255,7 +242,7 @@ export default function RoomAdminScreen() {
             <>
               <Pressable
                 style={[styles.actionButton, styles.regenerateButton]}
-                onPress={handleRegenerateChallenges}
+                onPress={() => setRegenerateChallengesConfirmVisible(true)}
                 disabled={actionLoading}>
                 {actionLoading ? (
                   <ActivityIndicator color={COLOR_WHITE} />
@@ -266,7 +253,7 @@ export default function RoomAdminScreen() {
 
               <Pressable
                 style={[styles.actionButton, styles.stopButton]}
-                onPress={handleStopGame}
+                onPress={() => setStopGameConfirmVisible(true)}
                 disabled={actionLoading}>
                 {actionLoading ? (
                   <ActivityIndicator color={COLOR_WHITE} />
@@ -279,7 +266,7 @@ export default function RoomAdminScreen() {
 
           <Pressable
             style={[styles.actionButton, styles.endButton]}
-            onPress={handleEndParty}
+            onPress={() => setEndPartyConfirmVisible(true)}
             disabled={actionLoading}>
             <Text style={styles.actionButtonText}>🚪 END PARTY</Text>
           </Pressable>
@@ -287,6 +274,59 @@ export default function RoomAdminScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Modals */}
+      <ConfirmationModal
+        visible={startGameConfirmVisible}
+        title="Start Game"
+        message="Are you ready to start the game? All participants will receive their first challenge."
+        confirmText="Start Game"
+        cancelText="Cancel"
+        isDangerous={false}
+        isLoading={actionLoading}
+        icon="⚔️"
+        onConfirm={handleStartGame}
+        onCancel={() => setStartGameConfirmVisible(false)}
+      />
+
+      <ConfirmationModal
+        visible={stopGameConfirmVisible}
+        title="Stop Game"
+        message="Are you sure you want to stop the game? Participants can still see their current challenges."
+        confirmText="Stop Game"
+        cancelText="Cancel"
+        isDangerous={true}
+        isLoading={actionLoading}
+        icon="⏸️"
+        onConfirm={handleStopGame}
+        onCancel={() => setStopGameConfirmVisible(false)}
+      />
+
+      <ConfirmationModal
+        visible={regenerateChallengesConfirmVisible}
+        title="Regenerate Challenges"
+        message="Assign new challenges to all participants? They will receive notifications with their new targets."
+        confirmText="Regenerate"
+        cancelText="Cancel"
+        isDangerous={false}
+        isLoading={actionLoading}
+        icon="🔄"
+        onConfirm={handleRegenerateChallenges}
+        onCancel={() => setRegenerateChallengesConfirmVisible(false)}
+      />
+
+      <ConfirmationModal
+        visible={endPartyConfirmVisible}
+        title="End Party"
+        message="Are you sure you want to end this party? This cannot be undone and all participants will be disconnected."
+        confirmText="End Party"
+        cancelText="Cancel"
+        isDangerous={true}
+        isLoading={actionLoading}
+        icon="🚪"
+        onConfirm={handleEndParty}
+        onCancel={() => setEndPartyConfirmVisible(false)}
+      />
     </SafeAreaView>
   );
 }
