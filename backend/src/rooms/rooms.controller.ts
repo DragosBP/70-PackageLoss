@@ -9,11 +9,8 @@ export class RoomsController {
 
   // --- ACȚIUNI SPECIFICE ---
 
-  @Post(':id/start-game')
-  async startGame(@Param('id') id: string) {
-    const cleanId = id.replace(':', '').trim();
-    return this.roomsService.startGame(cleanId);
-  }
+  // NOTE: start-game endpoint moved to ChallengeAssignmentController
+  // to ensure proper challenge assignment on game start
 
   @Delete('action/end/:id')
   async endRoom(@Param('id') id: string, @Query('nickname') nickname: string) {

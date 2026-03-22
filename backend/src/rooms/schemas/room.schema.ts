@@ -69,6 +69,13 @@ export class Room {
 
   @Prop({ type: Date, default: null })
   game_started_at: Date | null;
+
+  // Challenge regeneration timer fields
+  @Prop({ type: Date, default: null })
+  last_challenge_regeneration: Date | null;
+
+  @Prop({ type: Date, default: null })
+  next_challenge_regeneration: Date | null;
 }
 
 export const RoomSchema = SchemaFactory.createForClass(Room);

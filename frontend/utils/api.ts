@@ -49,6 +49,7 @@ export interface Room {
   participants: Participant[];
   game_started: boolean;
   game_started_at: string | null;
+  last_challenge_regeneration: string | null;
   next_challenge_regeneration: string | null;
 }
 

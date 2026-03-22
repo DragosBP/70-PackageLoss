@@ -66,19 +66,8 @@ export class RoomsService {
     return room;
   }
 
-  async startGame(id: string): Promise<Room> {
-    const cleanId = id.replace(':', '').trim();
-    this.assertValidId(cleanId);
-
-    const room = await this.roomModel.findByIdAndUpdate(
-      cleanId,
-      { game_started: true, game_started_at: new Date() },
-      { new: true, runValidators: true },
-    ).exec();
-
-    if (!room) throw new NotFoundException(`Room ${cleanId} not found`);
-    return room;
-  }
+  // NOTE: startGame method moved to ChallengeAssignmentService
+  // to ensure proper challenge assignment and timer setup
 
   async update(id: string, updateRoomDto: UpdateRoomDto): Promise<Room> {
     const cleanId = id.replace(':', '').trim();
