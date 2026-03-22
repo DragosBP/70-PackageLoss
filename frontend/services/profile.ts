@@ -5,7 +5,7 @@ const PROFILE_KEY = 'beefapp_profile';
 export interface LocalProfile {
   user_id: string;
   nickname: string;
-  pfp_url: string;
+  pfp_base64: string;
   fcm_token: string;
 }
 

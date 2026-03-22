@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -23,6 +24,7 @@ interface ChallengeCardProps {
   actionLoading: boolean;
   timeRemaining: string | null;
   isAdmin?: boolean;
+  targetAvatarUri?: string | null;
 }
 
 export const ChallengeCard: React.FC<ChallengeCardProps> = ({
@@ -31,6 +33,7 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
   actionLoading,
   timeRemaining,
   isAdmin = false,
+  targetAvatarUri,
 }) => {
   if (!challengeStatus?.assigned_challenge) {
     return (
@@ -74,9 +77,13 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({
         <Text style={styles.targetLabel}>TARGET</Text>
         <View style={styles.targetBox}>
           <View style={styles.targetAvatar}>
-            <Text style={styles.targetAvatarText}>
-              {challengeStatus.target_nickname?.charAt(0).toUpperCase() || '?'}
-            </Text>
+            {targetAvatarUri ? (
+              <Image source={{ uri: targetAvatarUri }} style={styles.targetAvatarImage} />
+            ) : (
+              <Text style={styles.targetAvatarText}>
+                {challengeStatus.target_nickname?.charAt(0).toUpperCase() || '?'}
+              </Text>
+            )}
           </View>
           <Text style={styles.targetName}>
             {challengeStatus.target_nickname || 'Unknown'}
@@ -176,6 +183,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  targetAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
   },
   targetAvatarText: {
     color: COLOR_DARK,

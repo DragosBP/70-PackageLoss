@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Query, Get, Param, Patch, Post } from '@nestjs/common';
-import { CreateRoomDto } from './dto/create-room.dto';
+import { CreateRoomDto, ParticipantDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
 
@@ -25,7 +25,7 @@ export class RoomsController {
   }
 
   @Post('action/join/:id')
-  async join(@Param('id') id: string, @Body() participantDto: any) {
+  async join(@Param('id') id: string, @Body() participantDto: ParticipantDto) {
     const cleanId = id.replace(':', '').trim();
     return this.roomsService.joinRoom(cleanId, participantDto);
   }

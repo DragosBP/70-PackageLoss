@@ -4,6 +4,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
@@ -22,13 +23,11 @@ export class ParticipantDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(600000)
+  @MaxLength(300000)
+  @Matches(/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/, {
+    message: 'pfp_base64 must be a valid image data URL',
+  })
   pfp_base64?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(2048)
-  pfp_url?: string;
 
   @IsOptional()
   @IsString()

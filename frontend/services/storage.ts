@@ -1,23 +1,28 @@
-import { FirebaseStorage, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { firebaseStorage, firebaseStorageFallback } from './firebase';
 
-const DEFAULT_MAX_IMAGE_BYTES = 300 * 1024;
+const DEFAULT_MAX_IMAGE_BYTES = 120 * 1024;
 
-async function uriToBlob(uri: string): Promise<Blob> {
+function isImageDataUrl(value: string): boolean {
+  return /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value);
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.onload = () => {
-      resolve(xhr.response as Blob);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = typeof reader.result === 'string' ? reader.result : null;
+      if (!result) {
+        reject(new Error('Unable to convert blob to base64'));
+        return;
+      }
+
+      const commaIndex = result.indexOf(',');
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
     };
-    xhr.onerror = () => {
-      reject(new Error('Failed to convert file URI to Blob'));
-    };
-    xhr.responseType = 'blob';
-    xhr.open('GET', uri, true);
-    xhr.send(null);
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read blob'));
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -76,84 +81,22 @@ export async function getProfileImageBase64(
   imageUri: string,
   maxBytes = DEFAULT_MAX_IMAGE_BYTES,
 ): Promise<string> {
-  const compressedUri = await compressToSize(imageUri, maxBytes);
-  const base64Data = await FileSystem.readAsStringAsync(compressedUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  return `data:image/jpeg;base64,${base64Data}`;
-}
-
-export async function uploadProfileImage(
-  roomId: string,
-  userId: string,
-  imageUri: string,
-  maxBytes = DEFAULT_MAX_IMAGE_BYTES,
-): Promise<string> {
-  let blob: Blob | null = null;
-
-  const uploadToStorage = async (storage: FirebaseStorage): Promise<string> => {
-    if (!blob) {
-      throw new Error('Missing blob payload for upload');
-    }
-
-    const imageRef = ref(storage, `rooms/${roomId}/${userId}.jpg`);
-    await uploadBytes(imageRef, blob, {
-      contentType: 'image/jpeg',
-    });
-    return getDownloadURL(imageRef);
-  };
-
-  try {
-    const compressedUri = await compressToSize(imageUri, maxBytes);
-    blob = await uriToBlob(compressedUri);
-
-    try {
-      return await uploadToStorage(firebaseStorage);
-    } catch (primaryError: unknown) {
-      const primaryCode =
-        primaryError &&
-        typeof primaryError === 'object' &&
-        'code' in primaryError &&
-        typeof primaryError.code === 'string'
-          ? primaryError.code
-          : null;
-
-      if (primaryCode === 'storage/unknown') {
-        return uploadToStorage(firebaseStorageFallback);
-      }
-
-      throw primaryError;
-    }
-  } catch (error: unknown) {
-    if (error && typeof error === 'object') {
-      const possibleCode =
-        'code' in error && typeof error.code === 'string' ? error.code : null;
-      const possibleMessage =
-        'message' in error && typeof error.message === 'string'
-          ? error.message
-          : 'Firebase Storage upload failed';
-      const serverResponse =
-        'serverResponse' in error && typeof error.serverResponse === 'string'
-          ? error.serverResponse
-          : 'customData' in error &&
-              error.customData &&
-              typeof error.customData === 'object' &&
-              'serverResponse' in error.customData &&
-              typeof error.customData.serverResponse === 'string'
-            ? error.customData.serverResponse
-            : null;
-
-      const details = [possibleMessage, possibleCode, serverResponse]
-        .filter(Boolean)
-        .join(' | ');
-
-      throw new Error(details || 'Firebase Storage upload failed');
-    }
-
-    throw error;
-  } finally {
-    if (blob && 'close' in blob && typeof blob.close === 'function') {
-      blob.close();
-    }
+  if (isImageDataUrl(imageUri)) {
+    return imageUri;
   }
+
+  const compressedUri = await compressToSize(imageUri, maxBytes);
+
+  let base64Data: string;
+  try {
+    const response = await fetch(compressedUri);
+    const blob = await response.blob();
+    base64Data = await blobToBase64(blob);
+  } catch {
+    base64Data = await FileSystem.readAsStringAsync(compressedUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+  }
+
+  return `data:image/jpeg;base64,${base64Data}`;
 }

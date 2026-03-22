@@ -4,7 +4,6 @@ import { Model } from 'mongoose';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { Room, RoomDocument } from './schemas/room.schema';
-import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class RoomsService {
@@ -12,7 +11,6 @@ export class RoomsService {
 
   constructor(
     @InjectModel(Room.name) private readonly roomModel: Model<RoomDocument>,
-    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(createRoomDto: CreateRoomDto): Promise<Room> {
@@ -37,7 +35,6 @@ export class RoomsService {
         user_id: participant.user_id,
         nickname: participant.nickname,
         pfp_base64: participant.pfp_base64 ?? '',
-        pfp_url: participant.pfp_url ?? '',
         fcm_token: participant.fcm_token ?? '',
         last_active: participant.last_active
           ? new Date(participant.last_active)
@@ -81,7 +78,6 @@ export class RoomsService {
         user_id: string;
         nickname: string;
         pfp_base64: string;
-        pfp_url: string;
         fcm_token: string;
         last_active: Date;
       }>;
@@ -112,7 +108,6 @@ export class RoomsService {
           user_id: participant.user_id,
           nickname: participant.nickname,
           pfp_base64: participant.pfp_base64 ?? '',
-          pfp_url: participant.pfp_url ?? '',
           fcm_token: participant.fcm_token ?? '',
           last_active: participant.last_active
             ? new Date(participant.last_active)
@@ -145,9 +140,6 @@ export class RoomsService {
     if (room.admin_nickname !== requestorNickname) {
       throw new BadRequestException('Forbidden: Only the admin can end this party!');
     }
-
-    // Clean up Firebase Storage images before deleting room.
-    await this.notificationsService.deleteRoomImages(cleanId);
 
     return this.roomModel.findByIdAndDelete(cleanId).exec();
   }
@@ -191,7 +183,6 @@ export class RoomsService {
       user_id: participantData.user_id,
       nickname: participantData.nickname,
       pfp_base64: participantData.pfp_base64 ?? '',
-      pfp_url: participantData.pfp_url ?? '',
       fcm_token: participantData.fcm_token ?? '',
       last_active: new Date(),
     };

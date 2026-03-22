@@ -4,21 +4,20 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
-  Platform,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  Dimensions,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
-import { AnimatedQRDropdown } from '../components/animated-qr-dropdown';
 import { ChallengeCard } from '../components/ChallengeCard';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { scheduleLocalChallengeAssignedNotification } from '../services/notifications';
+import * as Clipboard from 'expo-clipboard';
 
 const COLOR_RED = '#E63946';
 const COLOR_GREEN = '#34C759';
@@ -235,6 +234,36 @@ export default function RoomAdminScreen() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const normalizeAvatarUri = (avatar?: string): string | null => {
+    const value = avatar?.trim();
+    if (!value) {
+      return null;
+    }
+
+    if (value.startsWith('data:image/')) {
+      return value;
+    }
+
+    if (/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+      return `data:image/jpeg;base64,${value}`;
+    }
+
+    return null;
+  };
+
+  const getParticipantAvatarUri = (participant?: { pfp_base64?: string }): string | null => {
+    if (!participant) {
+      return null;
+    }
+
+    return normalizeAvatarUri(participant.pfp_base64);
+  };
+
+  const adminTargetParticipant = room.participants.find(
+    (participant) => participant.user_id === adminChallengeStatus?.target_user_id,
+  );
+  const adminTargetAvatarUri = getParticipantAvatarUri(adminTargetParticipant);
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -301,12 +330,17 @@ export default function RoomAdminScreen() {
               <Text style={styles.sectionTitle}>PARTICIPANTS</Text>
               {room.participants.map((participant) => {
                 const status = challengeStatuses.find((s) => s.user_id === participant.user_id);
+                const participantAvatarUri = getParticipantAvatarUri(participant);
                 return (
                   <View key={participant.user_id} style={styles.participantRow}>
                     <View style={styles.participantAvatar}>
-                      <Text style={styles.avatarText}>
-                        {participant.nickname.charAt(0).toUpperCase()}
-                      </Text>
+                      {participantAvatarUri ? (
+                        <Image source={{ uri: participantAvatarUri }} style={styles.participantAvatarImage} />
+                      ) : (
+                        <Text style={styles.avatarText}>
+                          {participant.nickname.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
                     </View>
                     <View style={styles.participantInfo}>
                       <Text style={styles.participantName}>
@@ -389,6 +423,7 @@ export default function RoomAdminScreen() {
             actionLoading={actionLoading}
             timeRemaining={getTimeRemaining()}
             isAdmin={true}
+            targetAvatarUri={adminTargetAvatarUri}
           />
         )}
 
@@ -581,6 +616,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  participantAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
   },
   avatarText: {
     color: COLOR_WHITE,

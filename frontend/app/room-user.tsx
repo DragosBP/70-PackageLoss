@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Platform,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -166,6 +166,36 @@ export default function RoomUserScreen() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  const normalizeAvatarUri = (avatar?: string): string | null => {
+    const value = avatar?.trim();
+    if (!value) {
+      return null;
+    }
+
+    if (value.startsWith('data:image/')) {
+      return value;
+    }
+
+    if (/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
+      return `data:image/jpeg;base64,${value}`;
+    }
+
+    return null;
+  };
+
+  const getParticipantAvatarUri = (participant?: { pfp_base64?: string }): string | null => {
+    if (!participant) {
+      return null;
+    }
+
+    return normalizeAvatarUri(participant.pfp_base64);
+  };
+
+  const targetParticipant = room.participants.find(
+    (participant) => participant.user_id === challengeStatus?.target_user_id,
+  );
+  const targetAvatarUri = getParticipantAvatarUri(targetParticipant);
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -199,9 +229,13 @@ export default function RoomUserScreen() {
               <Text style={styles.targetLabel}>TARGET</Text>
               <View style={styles.targetBox}>
                 <View style={styles.targetAvatar}>
-                  <Text style={styles.targetAvatarText}>
-                    {challengeStatus.target_nickname?.charAt(0).toUpperCase() || '?'}
-                  </Text>
+                  {targetAvatarUri ? (
+                    <Image source={{ uri: targetAvatarUri }} style={styles.targetAvatarImage} />
+                  ) : (
+                    <Text style={styles.targetAvatarText}>
+                      {challengeStatus.target_nickname?.charAt(0).toUpperCase() || '?'}
+                    </Text>
+                  )}
                 </View>
                 <Text style={styles.targetName}>
                   {challengeStatus.target_nickname || 'Unknown'}
@@ -245,26 +279,34 @@ export default function RoomUserScreen() {
 
         <View style={styles.participantsSection}>
           <Text style={styles.sectionTitle}>PARTY MEMBERS</Text>
-          {room.participants.map((participant) => (
-            <View key={participant.user_id} style={styles.participantRow}>
-              <View style={[
-                styles.participantAvatar,
-                participant.user_id === userId && styles.currentUserAvatar
-              ]}>
-                <Text style={styles.avatarText}>
-                  {participant.nickname.charAt(0).toUpperCase()}
+          {room.participants.map((participant) => {
+            const participantAvatarUri = getParticipantAvatarUri(participant);
+
+            return (
+              <View key={participant.user_id} style={styles.participantRow}>
+                <View style={[
+                  styles.participantAvatar,
+                  participant.user_id === userId && styles.currentUserAvatar
+                ]}>
+                  {participantAvatarUri ? (
+                    <Image source={{ uri: participantAvatarUri }} style={styles.participantAvatarImage} />
+                  ) : (
+                    <Text style={styles.avatarText}>
+                      {participant.nickname.charAt(0).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <Text style={[
+                  styles.participantName,
+                  participant.user_id === userId && styles.currentUserName
+                ]}>
+                  {participant.nickname}
+                  {participant.nickname === room.admin_nickname && ' (Host)'}
+                  {participant.user_id === userId && ' (You)'}
                 </Text>
               </View>
-              <Text style={[
-                styles.participantName,
-                participant.user_id === userId && styles.currentUserName
-              ]}>
-                {participant.nickname}
-                {participant.nickname === room.admin_nickname && ' (Host)'}
-                {participant.user_id === userId && ' (You)'}
-              </Text>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <Pressable
@@ -406,6 +448,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
+  targetAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
+  },
   targetAvatarText: {
     color: COLOR_DARK,
     fontWeight: 'bold',
@@ -493,6 +540,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  participantAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
   },
   currentUserAvatar: {
     backgroundColor: COLOR_RED,

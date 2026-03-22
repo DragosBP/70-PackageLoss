@@ -13,7 +13,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { roomAPI, handleApiError } from '../utils/api';
 import { getOrCreateUserId } from '../services/identity';
 import { getNativePushToken } from '../services/notifications';
-import { getProfileImageBase64, uploadProfileImage } from '../services/storage';
+import { getProfileImageBase64 } from '../services/storage';
 
 const COLOR_RED = '#E63946';
 const COLOR_WHITE = '#FFFFFF';
@@ -36,26 +36,19 @@ export default function UserScannerScreen() {
       const userId = await getOrCreateUserId();
       const fcmToken = await getNativePushToken();
 
-      // Upload image to Firebase Storage if present
-      let pfp_url = '';
-      let pfp_base64 = '';
+      // Always send avatars as base64 to backend.
+      let pfp_base64: string | undefined;
       if (params.mugshot) {
         try {
-          pfp_url = await uploadProfileImage(roomId, userId, params.mugshot);
-        } catch (uploadError) {
-          console.error('Failed to upload profile image:', uploadError);
-          try {
-            pfp_base64 = await getProfileImageBase64(params.mugshot);
-          } catch (base64Error) {
-            console.error('Failed to generate base64 profile image fallback:', base64Error);
-          }
+          pfp_base64 = await getProfileImageBase64(params.mugshot);
+        } catch (base64Error) {
+          console.error('Failed to generate base64 profile image:', base64Error);
         }
       }
 
       await roomAPI.joinRoom(roomId, {
         user_id: userId,
         nickname: userNickname,
-        pfp_url: pfp_url,
         pfp_base64,
         fcm_token: fcmToken || '',
       });
@@ -66,7 +59,7 @@ export default function UserScannerScreen() {
           roomId: roomId,
           nickname: userNickname,
           userId: userId,
-          mugshot: pfp_url || pfp_base64 || params.mugshot || '',
+          mugshot: pfp_base64 || params.mugshot || '',
         },
       });
     } catch (error) {

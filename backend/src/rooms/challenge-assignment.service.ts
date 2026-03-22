@@ -394,7 +394,6 @@ export class ChallengeAssignmentService {
         user_id: plainParticipant.user_id,
         nickname: plainParticipant.nickname,
         pfp_base64: plainParticipant.pfp_base64 || '',
-        pfp_url: plainParticipant.pfp_url || '',
         fcm_token: plainParticipant.fcm_token || '',
         last_active: plainParticipant.last_active || new Date(),
         assigned_challenge_id: randomChallenge._id,
