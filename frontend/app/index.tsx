@@ -3,6 +3,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   Pressable,
   ScrollView,
@@ -11,6 +13,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { getOrCreateUserId } from '../services/identity';
+import { roomAPI, handleApiError } from '../utils/api';
 
 const COLOR_RED = '#E63946';
 const COLOR_WHITE = '#FFFFFF';
@@ -24,6 +28,7 @@ export default function HomeScreen() {
   const [nickname, setNickname] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [mugshot, setMugshot] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -51,46 +56,91 @@ export default function HomeScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      quality: 1,
+      quality: 0.5,
       allowsEditing: true,
       aspect: [1, 1],
+      base64: true,
     });
 
     if (!result.canceled && result.assets.length > 0) {
-      setMugshot(result.assets[0].uri);
+      setMugshot(result.assets[0].base64 || result.assets[0].uri);
     }
   };
 
-  const createBeef = () => {
+  const createBeef = async () => {
     if (!nickname.trim()) {
+      Alert.alert('Error', 'Please enter a nickname');
       return;
     }
 
-    const code = Math.random().toString(36).substring(2, 7).toUpperCase();
-    router.push({
-      pathname: '/room-admin',
-      params: {
-        room: code,
-        nickname,
-        mugshot: mugshot ?? '',
-        isAdmin: 'true',
-      },
-    });
+    setLoading(true);
+    try {
+      const userId = await getOrCreateUserId();
+
+      const response = await roomAPI.createRoom({
+        room_name: `${nickname}'s Party`,
+        admin_nickname: nickname,
+        participants: [{
+          user_id: userId,
+          nickname: nickname,
+          pfp_base64: mugshot || '',
+          fcm_token: '',
+        }],
+      });
+
+      const roomId = response.data._id;
+
+      router.push({
+        pathname: '/room-admin',
+        params: {
+          roomId,
+          nickname,
+          userId,
+          mugshot: mugshot ?? '',
+        },
+      });
+    } catch (error) {
+      Alert.alert('Error', handleApiError(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const joinBeef = () => {
-    if (!nickname.trim() || !roomCode.trim()) {
+  const joinBeef = async () => {
+    if (!nickname.trim()) {
+      Alert.alert('Error', 'Please enter a nickname');
+      return;
+    }
+    if (!roomCode.trim()) {
+      Alert.alert('Error', 'Please enter a room code');
       return;
     }
 
-    router.push({
-      pathname: '/room-user',
-      params: {
-        room: roomCode.toUpperCase(),
-        nickname,
-        mugshot: mugshot ?? '',
-      },
-    });
+    setLoading(true);
+    try {
+      const userId = await getOrCreateUserId();
+
+      const response = await roomAPI.joinRoom(roomCode.trim(), {
+        user_id: userId,
+        nickname: nickname,
+        pfp_base64: mugshot || '',
+        fcm_token: '',
+      });
+
+      router.push({
+        pathname: '/room-user',
+        params: {
+          roomId: roomCode.trim(),
+          nickname,
+          userId,
+          mugshot: mugshot ?? '',
+        },
+      });
+    } catch (error) {
+      Alert.alert('Error', handleApiError(error));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -113,7 +163,7 @@ export default function HomeScreen() {
             <Pressable style={styles.mugshotContainer} onPress={() => void handleMugshot()}>
               {mugshot ? (
                 <Animated.Image
-                  source={{ uri: mugshot }}
+                  source={{ uri: mugshot.startsWith('data:') ? mugshot : `data:image/jpeg;base64,${mugshot}` }}
                   style={[styles.mugshotImage, { transform: [{ scale: pulseAnim }] }]}
                 />
               ) : (
@@ -131,6 +181,7 @@ export default function HomeScreen() {
               value={nickname}
               onChangeText={setNickname}
               maxLength={64}
+              editable={!loading}
             />
           </View>
 
@@ -141,28 +192,47 @@ export default function HomeScreen() {
           </View>
 
           <Pressable
-            style={({ pressed }) => [styles.createButton, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => createBeef()}>
-            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-              <Text style={styles.createButtonText}>⚔ CREATE NEW BEEF</Text>
-            </Animated.View>
+            style={({ pressed }) => [styles.createButton, { opacity: pressed || loading ? 0.8 : 1 }]}
+            onPress={() => void createBeef()}
+            disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color={COLOR_WHITE} size="small" />
+            ) : (
+              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                <Text style={styles.createButtonText}>⚔ CREATE NEW BEEF</Text>
+              </Animated.View>
+            )}
           </Pressable>
 
           <View style={styles.joinContainer}>
             <TextInput
               style={styles.roomCodeInput}
-              placeholder="ROOM CODE"
+              placeholder="ROOM ID"
               placeholderTextColor="#444"
               value={roomCode}
-              onChangeText={(text) => setRoomCode(text.toUpperCase())}
-              maxLength={5}
+              onChangeText={setRoomCode}
+              maxLength={24}
+              autoCapitalize="none"
+              editable={!loading}
             />
             <Pressable
-              style={({ pressed }) => [styles.joinButton, { opacity: pressed ? 0.8 : 1 }]}
-              onPress={() => joinBeef()}>
-              <Text style={styles.joinButtonText}>JOIN BEEF</Text>
+              style={({ pressed }) => [styles.joinButton, { opacity: pressed || loading ? 0.8 : 1 }]}
+              onPress={() => void joinBeef()}
+              disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color={COLOR_WHITE} size="small" />
+              ) : (
+                <Text style={styles.joinButtonText}>JOIN BEEF</Text>
+              )}
             </Pressable>
           </View>
+
+          <Pressable
+            style={styles.scanButton}
+            onPress={() => router.push({ pathname: '/scanner' as any, params: { nickname, mugshot: mugshot ?? '' } })}
+            disabled={loading}>
+            <Text style={styles.scanButtonText}>📷 SCAN QR CODE</Text>
+          </Pressable>
 
           <Text style={styles.tagline}>No mercy. No excuses.</Text>
         </View>
@@ -236,6 +306,7 @@ const styles = StyleSheet.create({
   mugshotImage: {
     width: 96,
     height: 96,
+    borderRadius: 48,
   },
   mugshotPlaceholder: {
     alignItems: 'center',
@@ -286,6 +357,8 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     marginBottom: 16,
     alignItems: 'center',
+    minHeight: 64,
+    justifyContent: 'center',
   },
   createButtonText: {
     color: '#FFFFFF',
@@ -298,6 +371,7 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 12,
   },
   roomCodeInput: {
     flex: 1,
@@ -306,9 +380,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR_DARK,
     color: COLOR_WHITE,
     fontFamily: 'System',
-    fontSize: 18,
-    letterSpacing: 5,
-    paddingHorizontal: 16,
+    fontSize: 14,
+    letterSpacing: 1,
+    paddingHorizontal: 12,
     paddingVertical: 16,
     textAlign: 'center',
   },
@@ -320,12 +394,28 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 100,
   },
   joinButtonText: {
     color: COLOR_WHITE,
     fontFamily: 'System',
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 14,
+    letterSpacing: 2,
+  },
+  scanButton: {
+    width: '100%',
+    borderWidth: 2,
+    borderColor: COLOR_BORDER,
+    backgroundColor: COLOR_DARKER,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  scanButtonText: {
+    color: COLOR_DIM,
+    fontFamily: 'System',
+    fontWeight: '600',
+    fontSize: 14,
     letterSpacing: 2,
   },
   tagline: {

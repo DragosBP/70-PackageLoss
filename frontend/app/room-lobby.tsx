@@ -1,141 +1,196 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
+  Pressable,
+  Alert,
 } from 'react-native';
-import axios from 'axios';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { roomAPI, handleApiError, Room } from '../utils/api';
+import { getOrCreateUserId } from '../services/identity';
 
-interface Participant {
-  user_id: string;
-  nickname: string;
-  pfp_url?: string;
-}
+const COLOR_RED = '#E63946';
+const COLOR_GREEN = '#34C759';
+const COLOR_WHITE = '#FFFFFF';
+const COLOR_DARK = '#1A1A1A';
+const COLOR_BORDER = '#3A3A3A';
+const COLOR_DIM = '#666666';
+const COLOR_DARKER = '#2A2A2A';
 
 export default function RoomLobbyScreen() {
-  const route = useRoute();
-  const navigation = useNavigation();
-  const roomId = (route.params as any)?.roomId || 'mock-room-id-123';
+  const router = useRouter();
+  const params = useLocalSearchParams<{ roomId: string; nickname?: string }>();
+  const roomId = params.roomId;
 
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [room, setRoom] = useState<Room | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  const fetchRoomData = async () => {
-    try {
-      // Mock Data for testing before Dev 1 finishes:
-      const mockData = [
-        { user_id: '1', nickname: 'Tremendous Dog', pfp_url: '' },
-        { user_id: '2', nickname: 'Sneaky Cat', pfp_url: '' },
-        { user_id: '3', nickname: 'Flying Eagle', pfp_url: '' },
-      ];
-
-      // TODO: Replace with Dev 1's actual endpoint:
-      // const response = await axios.get(`http://YOUR_LOCAL_IP:3000/rooms/${roomId}`);
-      // setParticipants(response.data.participants);
-      // setIsAdmin(response.data.admin_nickname === localAdminNickname);
-
-      setParticipants(mockData);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching room data', err);
-      setError('Failed to load participants');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    // Fetch immediately on mount
-    fetchRoomData();
+    const initUserId = async () => {
+      const id = await getOrCreateUserId();
+      setUserId(id);
+    };
+    initUserId();
+  }, []);
 
-    // Set up polling every 5 seconds
-    const interval = setInterval(() => {
-      fetchRoomData();
-    }, 5000);
-
-    // Cleanup interval when user leaves the screen
-    return () => clearInterval(interval);
-  }, [roomId]);
-
-  const handleStartChallenge = async () => {
-    if (!isAdmin) {
-      alert('Only the admin can start the challenge');
+  const fetchRoomData = useCallback(async () => {
+    if (!roomId) {
+      setError('No room ID provided');
+      setLoading(false);
       return;
     }
 
     try {
-      // TODO: Call Dev 2's endpoint to trigger immediate challenge assignment
-      // await axios.post(`http://YOUR_LOCAL_IP:3000/rooms/${roomId}/start-challenge`);
-      alert('Challenge started!');
-      // Navigate to challenge screen or wait for FCM notification
+      const response = await roomAPI.getRoom(roomId);
+      setRoom(response.data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching room data', err);
+      setError('Failed to load room data');
+    } finally {
+      setLoading(false);
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    fetchRoomData();
+    const interval = setInterval(fetchRoomData, 5000);
+    return () => clearInterval(interval);
+  }, [fetchRoomData]);
+
+  const isAdmin = room && userId
+    ? room.participants.some(
+        (p) => p.user_id === userId && p.nickname === room.admin_nickname
+      )
+    : false;
+
+  const handleStartChallenge = async () => {
+    if (!roomId) return;
+    setActionLoading(true);
+    try {
+      await roomAPI.startGame(roomId);
+      await fetchRoomData();
+      Alert.alert('Success', 'Game started!');
     } catch (error) {
-      console.error('Error starting challenge:', error);
-      alert('Failed to start challenge');
+      Alert.alert('Error', handleApiError(error));
+    } finally {
+      setActionLoading(false);
     }
   };
 
   const handleLeaveRoom = async () => {
-    try {
-      // TODO: Call Dev 1's leave endpoint
-      // await axios.post(`http://YOUR_LOCAL_IP:3000/rooms/${roomId}/leave`, { userId });
-      navigation.goBack();
-    } catch (error) {
-      console.error('Error leaving room:', error);
-      alert('Failed to leave room');
-    }
+    if (!roomId || !userId) return;
+    Alert.alert(
+      'Leave Room',
+      'Are you sure you want to leave?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              await roomAPI.leaveRoom(roomId, userId);
+              router.replace('/');
+            } catch (error) {
+              Alert.alert('Error', handleApiError(error));
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
   };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color={COLOR_RED} />
+        <Text style={styles.loadingText}>Loading lobby...</Text>
+      </View>
+    );
+  }
+
+  if (error || !room) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>{error || 'Room not found'}</Text>
+        <Pressable style={styles.backButton} onPress={() => router.replace('/')}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Lobby</Text>
-      <Text style={styles.roomId}>Room: {roomId}</Text>
-      <Text style={styles.subtitle}>
-        {participants.length} participant{participants.length !== 1 ? 's' : ''}
-      </Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>{room.room_name}</Text>
+        <Text style={styles.roomId}>Room ID: {roomId}</Text>
+        <Text style={styles.subtitle}>
+          {room.participants.length} participant{room.participants.length !== 1 ? 's' : ''}
+        </Text>
+        {room.game_started && (
+          <View style={styles.liveBadge}>
+            <Text style={styles.liveText}>GAME IN PROGRESS</Text>
+          </View>
+        )}
+      </View>
 
-      {error && <Text style={styles.errorText}>{error}</Text>}
-
-      {loading ? (
-        <ActivityIndicator size="large" color="#0000ff" style={styles.loader} />
-      ) : (
-        <FlatList
-          data={participants}
-          keyExtractor={(item) => item.user_id}
-          renderItem={({ item }) => (
-            <View style={styles.participantRow}>
-              <View style={styles.participantAvatar}>
-                <Text style={styles.avatarText}>
-                  {item.nickname.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <Text style={styles.participantName}>{item.nickname}</Text>
+      <FlatList
+        data={room.participants}
+        keyExtractor={(item) => item.user_id}
+        renderItem={({ item }) => (
+          <View style={styles.participantRow}>
+            <View style={[
+              styles.participantAvatar,
+              item.user_id === userId && styles.currentUserAvatar
+            ]}>
+              <Text style={styles.avatarText}>
+                {item.nickname.charAt(0).toUpperCase()}
+              </Text>
             </View>
-          )}
-          scrollEnabled={true}
-        />
-      )}
+            <Text style={[
+              styles.participantName,
+              item.user_id === userId && styles.currentUserName
+            ]}>
+              {item.nickname}
+              {item.nickname === room.admin_nickname && ' (Host)'}
+              {item.user_id === userId && ' (You)'}
+            </Text>
+          </View>
+        )}
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+      />
 
       <View style={styles.buttonContainer}>
-        {isAdmin && (
-          <TouchableOpacity
+        {isAdmin && !room.game_started && (
+          <Pressable
             style={[styles.button, styles.startButton]}
             onPress={handleStartChallenge}
-          >
-            <Text style={styles.buttonText}>Start Challenge</Text>
-          </TouchableOpacity>
+            disabled={actionLoading}>
+            {actionLoading ? (
+              <ActivityIndicator color={COLOR_WHITE} />
+            ) : (
+              <Text style={styles.buttonText}>⚔ Start Game</Text>
+            )}
+          </Pressable>
         )}
-        <TouchableOpacity
+        <Pressable
           style={[styles.button, styles.leaveButton]}
           onPress={handleLeaveRoom}
-        >
+          disabled={actionLoading}>
           <Text style={styles.buttonText}>Leave Room</Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </View>
   );
@@ -145,78 +200,125 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 5,
-  },
-  roomId: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'gray',
-    marginBottom: 20,
-  },
-  loader: {
-    flex: 1,
+    backgroundColor: COLOR_DARK,
     justifyContent: 'center',
   },
-  errorText: {
-    color: 'red',
+  header: {
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLOR_WHITE,
+    marginBottom: 4,
+  },
+  roomId: {
+    fontSize: 12,
+    color: COLOR_DIM,
+    marginBottom: 8,
+    fontFamily: 'monospace',
+  },
+  subtitle: {
     fontSize: 14,
-    marginBottom: 10,
+    color: COLOR_DIM,
+    marginBottom: 8,
+  },
+  liveBadge: {
+    backgroundColor: COLOR_GREEN,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  liveText: {
+    color: COLOR_WHITE,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  loadingText: {
+    color: COLOR_DIM,
+    fontSize: 16,
+    marginTop: 12,
     textAlign: 'center',
   },
+  errorText: {
+    color: COLOR_RED,
+    fontSize: 16,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingBottom: 20,
+  },
   participantRow: {
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    padding: 14,
+    backgroundColor: COLOR_DARKER,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
   participantAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: COLOR_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
+  currentUserAvatar: {
+    backgroundColor: COLOR_RED,
+  },
   avatarText: {
-    color: '#fff',
+    color: COLOR_WHITE,
     fontWeight: 'bold',
-    fontSize: 18,
+    fontSize: 16,
   },
   participantName: {
-    fontSize: 18,
+    fontSize: 16,
+    color: COLOR_DIM,
     flex: 1,
   },
+  currentUserName: {
+    color: COLOR_WHITE,
+    fontWeight: '600',
+  },
   buttonContainer: {
-    marginTop: 20,
-    gap: 10,
+    gap: 12,
   },
   button: {
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 50,
   },
   startButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: COLOR_GREEN,
   },
   leaveButton: {
-    backgroundColor: '#FF3B30',
+    backgroundColor: COLOR_RED,
+  },
+  backButton: {
+    backgroundColor: COLOR_RED,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+  },
+  backButtonText: {
+    color: COLOR_WHITE,
+    fontSize: 16,
+    fontWeight: '700',
   },
   buttonText: {
-    color: '#fff',
+    color: COLOR_WHITE,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
 });

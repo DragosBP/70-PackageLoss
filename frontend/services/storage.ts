@@ -21,9 +21,7 @@ async function compressToSize(uri: string, maxBytes: number): Promise<string> {
       },
     );
 
-    const fileInfo = await FileSystem.getInfoAsync(manipulated.uri, {
-      size: true,
-    });
+    const fileInfo = await FileSystem.getInfoAsync(manipulated.uri);
 
     lastResultUri = manipulated.uri;
     if (fileInfo.exists && typeof fileInfo.size === 'number' && fileInfo.size <= maxBytes) {
