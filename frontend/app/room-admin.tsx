@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Platform,
   Pressable,
   SafeAreaView,
@@ -11,7 +12,6 @@ import {
   Text,
   View,
   Dimensions,
-  Animated,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
@@ -36,9 +36,6 @@ export default function RoomAdminScreen() {
     userId?: string;
   }>();
 
-  const [toastMessage, setToastMessage] = useState(''); // Added state for toast message
-  const [toastVisible, setToastVisible] = useState(false); // Ensure toast visibility is managed
-  const [toastOpacity] = useState(new Animated.Value(0)); // Ensure opacity is animated
   const [room, setRoom] = useState<Room | null>(null);
   const [challengeStatuses, setChallengeStatuses] = useState<ChallengeStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +43,10 @@ export default function RoomAdminScreen() {
   const [showQR, setShowQR] = useState(false);
   const [viewMode, setViewMode] = useState<'admin' | 'user'>('admin');
   const [adminChallengeStatus, setAdminChallengeStatus] = useState<ChallengeStatus | null>(null);
+
+  // Toast state
+  const [toastOpacity] = useState(new Animated.Value(0));
+  const [toastVisible, setToastVisible] = useState(false);
 
   // Modal states
   const [startGameConfirmVisible, setStartGameConfirmVisible] = useState(false);
@@ -60,17 +61,15 @@ export default function RoomAdminScreen() {
       setRoom(response.data);
 
       if (response.data.game_started) {
-        // Get all challenge statuses for admin overview (existing)
         const statusResponse = await roomAPI.getAllChallengeStatuses(roomId);
         setChallengeStatuses(statusResponse.data);
 
-        // NEW: Get admin's personal challenge status for user view
         if (userId) {
           try {
             const adminStatusResponse = await roomAPI.getChallengeStatus(roomId, userId);
             setAdminChallengeStatus(adminStatusResponse.data);
           } catch {
-            setAdminChallengeStatus(null); // Admin might not have challenge assigned yet
+            setAdminChallengeStatus(null);
           }
         }
       } else {
@@ -90,12 +89,27 @@ export default function RoomAdminScreen() {
     return () => clearInterval(interval);
   }, [fetchRoomData]);
 
+  const showToast = () => {
+    setToastVisible(true);
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToastVisible(false));
+  };
+
+  const handleCopyCode = async () => {
+    if (!roomId) return;
+    await Clipboard.setStringAsync(roomId as string);
+    showToast();
+  };
+
   const handleMarkComplete = async () => {
     if (!roomId || !userId) return;
     setActionLoading(true);
     try {
       await roomAPI.markChallengeComplete(roomId, userId);
-      await fetchRoomData(); // Refresh both admin and user view data
+      await fetchRoomData();
       Alert.alert('Success', 'Your challenge marked as complete!');
     } catch (error) {
       Alert.alert('Error', handleApiError(error));
@@ -157,22 +171,6 @@ export default function RoomAdminScreen() {
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const showToast = (message: string) => {
-    setToastMessage(message); // Set the message to display
-    setToastVisible(true);
-    Animated.sequence([
-      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.delay(1500),
-      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start(() => setToastVisible(false));
-  };
-
-  const handleCopyCode = async () => {
-    if (!roomId) return;
-    await Clipboard.setStringAsync(roomId as string);
-    showToast('Room code copied to clipboard!'); // Pass message to toast
   };
 
   if (loading) {
@@ -237,7 +235,6 @@ export default function RoomAdminScreen() {
           </View>
         )}
 
-        {/* Conditional view rendering */}
         {viewMode === 'admin' ? (
           <>
             <Pressable style={styles.qrToggle} onPress={() => setShowQR(!showQR)}>
@@ -305,26 +302,23 @@ export default function RoomAdminScreen() {
 
               {!room.game_started ? (
                 <>
-                <Pressable
-                  style={[styles.actionButton, styles.startButton]}
-                  onPress={() => handleCopyCode()}
-                  disabled={actionLoading}>
-                  {actionLoading ? (
-                    <ActivityIndicator color={COLOR_WHITE} />
-                  ) : (
-                    <Text style={styles.actionButtonText}>Copy Code</Text>
-                  )}
-                </Pressable>
-                <Pressable
-                  style={[styles.actionButton, styles.startButton]}
-                  onPress={() => setStartGameConfirmVisible(true)}
-                  disabled={actionLoading}>
-                  {actionLoading ? (
-                    <ActivityIndicator color={COLOR_WHITE} />
-                  ) : (
-                    <Text style={styles.actionButtonText}>⚔ START GAME</Text>
-                  )}
-                </Pressable>
+                  <Pressable
+                    style={[styles.actionButton, styles.copyButton]}
+                    onPress={handleCopyCode}
+                    disabled={actionLoading}>
+                    <Text style={styles.actionButtonText}>📋 COPY CODE</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[styles.actionButton, styles.startButton]}
+                    onPress={() => setStartGameConfirmVisible(true)}
+                    disabled={actionLoading}>
+                    {actionLoading ? (
+                      <ActivityIndicator color={COLOR_WHITE} />
+                    ) : (
+                      <Text style={styles.actionButtonText}>⚔ START GAME</Text>
+                    )}
+                  </Pressable>
                 </>
               ) : (
                 <>
@@ -372,6 +366,13 @@ export default function RoomAdminScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Toast Notification */}
+      {toastVisible && (
+        <Animated.View style={[styles.toast, { opacity: toastOpacity }]}>
+          <Text style={styles.toastText}>✓ Code copied!</Text>
+        </Animated.View>
+      )}
 
       {/* Modals */}
       <ConfirmationModal
@@ -587,6 +588,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
+  copyButton: {
+    backgroundColor: '#007AFF',
+  },
   startButton: {
     backgroundColor: COLOR_GREEN,
   },
@@ -641,17 +645,21 @@ const styles = StyleSheet.create({
   },
   toast: {
     position: 'absolute',
-    bottom: 20,
-    left: '10%',
-    right: '10%',
-    backgroundColor: 'black',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    zIndex: 1000, // Ensure it appears above other elements
+    bottom: 60,
+    alignSelf: 'center',
+    backgroundColor: COLOR_GREEN,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
   },
   toastText: {
-    color: 'white',
+    color: COLOR_WHITE,
     fontSize: 14,
+    fontWeight: '700',
   },
 });
