@@ -17,6 +17,7 @@ export interface ParticipantDto {
   user_id: string;
   nickname: string;
   pfp_base64?: string;
+  pfp_url?: string;
   fcm_token?: string;
 }
 

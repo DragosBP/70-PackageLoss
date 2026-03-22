@@ -15,6 +15,9 @@ export class Participant {
   pfp_base64: string;
 
   @Prop({ trim: true, default: '' })
+  pfp_url: string;
+
+  @Prop({ trim: true, default: '' })
   fcm_token: string;
 
   @Prop({ default: Date.now })

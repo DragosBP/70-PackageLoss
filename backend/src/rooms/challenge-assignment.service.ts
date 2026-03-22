@@ -92,19 +92,8 @@ export class ChallengeAssignmentService {
       `Game started for room ${roomId}. Next regeneration at ${nextRegen.toISOString()}`,
     );
 
-    // Send FCM notifications to all participants
-    const fcmTokens = updatedRoom.participants
-      .map((p) => p.fcm_token)
-      .filter((t) => t && t.length > 0);
-
-    if (fcmTokens.length > 0) {
-      void this.notificationsService.sendToMultiple(
-        fcmTokens,
-        'Game Started!',
-        'Your first challenge is ready. Check the app!',
-        { roomId, type: 'game_started' },
-      );
-    }
+    // Send push notifications to all participants
+    await this.sendChallengeNotifications(updatedRoom, challenges);
 
     return updatedRoom;
   }
@@ -208,19 +197,8 @@ export class ChallengeAssignmentService {
       `Successfully regenerated challenges for ${updatedParticipants.length} participants in room ${roomId}`,
     );
 
-    // Send FCM notifications to all participants
-    const fcmTokens = updatedRoom.participants
-      .map((p) => p.fcm_token)
-      .filter((t) => t && t.length > 0);
-
-    if (fcmTokens.length > 0) {
-      void this.notificationsService.sendToMultiple(
-        fcmTokens,
-        'New Challenge!',
-        'A new challenge has been assigned to you.',
-        { roomId, type: 'challenge_regenerated' },
-      );
-    }
+    // Send push notifications to all participants
+    await this.sendChallengeNotifications(updatedRoom, challenges);
 
     return updatedRoom;
   }
@@ -419,6 +397,7 @@ export class ChallengeAssignmentService {
         user_id: plainParticipant.user_id,
         nickname: plainParticipant.nickname,
         pfp_base64: plainParticipant.pfp_base64 || '',
+        pfp_url: plainParticipant.pfp_url || '',
         fcm_token: plainParticipant.fcm_token || '',
         last_active: plainParticipant.last_active || new Date(),
         assigned_challenge_id: randomChallenge._id,
@@ -475,5 +454,41 @@ export class ChallengeAssignmentService {
   ): ChallengeDocument {
     const randomIndex = Math.floor(Math.random() * challenges.length);
     return challenges[randomIndex];
+  }
+
+  /**
+   * Private helper: Send push notifications to all participants with their new challenges
+   */
+  private async sendChallengeNotifications(
+    room: Room,
+    challenges: ChallengeDocument[],
+  ): Promise<void> {
+    const challengeMap = new Map(
+      challenges.map((c) => [(c._id as Types.ObjectId).toString(), c]),
+    );
+
+    const notificationData = room.participants
+      .filter((p) => p.fcm_token && p.assigned_challenge_id)
+      .map((participant) => {
+        const challenge = challengeMap.get(
+          participant.assigned_challenge_id!.toString(),
+        );
+        const target = room.participants.find(
+          (p) => p.user_id === participant.target_user_id,
+        );
+
+        return {
+          fcmToken: participant.fcm_token,
+          targetNickname: target?.nickname || 'Unknown',
+          challengeTitle: challenge?.title || 'New Challenge',
+          challengeDescription: challenge?.description || '',
+        };
+      });
+
+    if (notificationData.length > 0) {
+      await this.notificationsService.sendBulkChallengeNotifications(
+        notificationData,
+      );
+    }
   }
 }
