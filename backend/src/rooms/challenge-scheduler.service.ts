@@ -39,7 +39,9 @@ export class ChallengeSchedulerService {
         return; // No rooms due, skip logging to reduce noise
       }
 
-      this.logger.log(`Found ${roomsDue.length} room(s) due for challenge regeneration`);
+      this.logger.log(
+        `Found ${roomsDue.length} room(s) due for challenge regeneration`,
+      );
 
       let successCount = 0;
       let failureCount = 0;
