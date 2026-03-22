@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR_GREEN,
   },
   cancelButtonText: {
-    color: COLOR_DIM,
+    color: COLOR_WHITE,
     fontSize: 14,
     fontWeight: '600',
   },

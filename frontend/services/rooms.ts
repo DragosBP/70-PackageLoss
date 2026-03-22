@@ -4,6 +4,7 @@ export interface Participant {
   user_id: string;
   nickname: string;
   pfp_base64?: string;
+  pfp_url?: string;
   fcm_token?: string;
   last_active?: string;
 }
@@ -11,7 +12,7 @@ export interface Participant {
 export interface CreateRoomPayload {
   room_name: string;
   admin_nickname: string;
-  expires_at: string;
+  expires_at?: string;
   participants?: Participant[];
   active_alerts?: string[];
 }

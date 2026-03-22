@@ -17,46 +17,52 @@ export interface CreateRoomFormProps {
 }
 
 export default function CreateRoomForm({ onRoomCreated }: CreateRoomFormProps) {
+  // Hook-ul tău care se ocupă de request-ul către Backend
   const { createRoom, loading, error } = useCreateRoom();
+  
   const [roomName, setRoomName] = useState('');
   const [adminNickname, setAdminNickname] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
 
   const handleCreateRoom = async () => {
-    if (!roomName.trim()) {
-      Alert.alert('Eroare', 'Numele camerei este necesar');
+    // 1. Validări locale simple
+    if (!roomName.trim() || !adminNickname.trim()) {
+      Alert.alert('Eroare', 'Numele camerei și porecla sunt obligatorii.');
       return;
     }
 
-    if (!adminNickname.trim()) {
-      Alert.alert('Eroare', 'Porecla admin-ului este necesară');
-      return;
+    // 2. Construim obiectul de trimis (Payload)
+    // Trimitem doar câmpurile de care Backend-ul are nevoie
+    const payload: any = {
+      room_name: roomName.trim(),
+      admin_nickname: adminNickname.trim(),
+    };
+
+    // Adăugăm data doar dacă user-ul a scris ceva (evităm string gol "")
+    if (expiresAt.trim().length > 0) {
+      payload.expires_at = expiresAt.trim();
     }
 
-    if (!expiresAt.trim()) {
-      Alert.alert('Eroare', 'Data expirării este necesară');
-      return;
-    }
+    // 3. Apelăm funcția din Hook
+    const result = await createRoom(payload);
 
-    const response = await createRoom({
-      room_name: roomName,
-      admin_nickname: adminNickname,
-      expires_at: expiresAt,
-    });
-
-    if (response.success && response.data) {
+    // 4. Verificăm rezultatul
+    if (result && result.success && result.data) {
       Alert.alert('Succes', `Camera "${roomName}" a fost creată!`);
+      
+      // Resetăm câmpurile
       setRoomName('');
       setAdminNickname('');
       setExpiresAt('');
+      
+      // Anunțăm părintele că am terminat
       if (onRoomCreated) {
-        onRoomCreated(response.data._id);
+        onRoomCreated(result.data._id);
       }
-    } else {
-      Alert.alert('Eroare', error || 'Eroare la crearea camerei');
     }
   };
 
+  // Sugestie de dată (1 oră în viitor)
   const suggestedExpiry = new Date(Date.now() + 3600000).toISOString();
 
   return (
@@ -66,53 +72,54 @@ export default function CreateRoomForm({ onRoomCreated }: CreateRoomFormProps) {
           Crează Cameră Nouă
         </ThemedText>
 
-        {/* Room Name */}
+        {/* Nume Cameră */}
         <View style={styles.inputContainer}>
           <ThemedText style={styles.label}>Numele Camerei</ThemedText>
           <TextInput
             style={styles.input}
-            placeholder="Ex: Team Meeting"
+            placeholder="Ex: Cabana Păltiniș"
             placeholderTextColor="#999"
             value={roomName}
             onChangeText={setRoomName}
             editable={!loading}
-            maxLength={100}
           />
         </View>
 
-        {/* Admin Nickname */}
+        {/* Poreclă Admin */}
         <View style={styles.inputContainer}>
-          <ThemedText style={styles.label}>Porecla Admin</ThemedText>
+          <ThemedText style={styles.label}>Porecla Ta (Admin)</ThemedText>
           <TextInput
             style={styles.input}
-            placeholder="Ex: John"
+            placeholder="Ex: Sasu"
             placeholderTextColor="#999"
             value={adminNickname}
             onChangeText={setAdminNickname}
             editable={!loading}
-            maxLength={64}
           />
         </View>
 
-        {/* Expires At */}
+        {/* Expirare */}
         <View style={styles.inputContainer}>
-          <ThemedText style={styles.label}>Expirează la</ThemedText>
+          <ThemedText style={styles.label}>Expirare (Format ISO - Opțional)</ThemedText>
           <TextInput
             style={styles.input}
-            placeholder={suggestedExpiry}
+            placeholder="YYYY-MM-DD..."
             placeholderTextColor="#999"
             value={expiresAt}
             onChangeText={setExpiresAt}
             editable={!loading}
           />
-          <TouchableOpacity onPress={() => setExpiresAt(suggestedExpiry)}>
+          <TouchableOpacity 
+            onPress={() => setExpiresAt(suggestedExpiry)}
+            style={styles.hintButton}
+          >
             <ThemedText style={styles.hint}>
-              💡 Cu 1 oră de acum
+              💡 Pune automat: +1 oră
             </ThemedText>
           </TouchableOpacity>
         </View>
 
-        {/* Button */}
+        {/* Buton Creare */}
         <View style={styles.buttonContainer}>
           <PressButton
             title={loading ? 'Se creează...' : 'Crează Camera'}
@@ -123,10 +130,10 @@ export default function CreateRoomForm({ onRoomCreated }: CreateRoomFormProps) {
           />
         </View>
 
-        {/* Error */}
+        {/* AFIȘARE ERORI (Aici am reparat eroarea ta) */}
         {error && (
           <ThemedText style={styles.errorText}>
-            ⚠️ {error}
+            ⚠️ {Array.isArray(error) ? error.join(', ') : error}
           </ThemedText>
         )}
       </ThemedView>
@@ -158,25 +165,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
+    padding: 12,
     fontSize: 16,
     backgroundColor: '#f9f9f9',
     color: '#000',
   },
+  hintButton: {
+    marginTop: 6,
+  },
   hint: {
     fontSize: 12,
     color: '#007AFF',
-    marginTop: 6,
     fontWeight: '500',
   },
   buttonContainer: {
-    marginTop: 24,
-    marginBottom: 12,
+    marginTop: 20,
   },
   errorText: {
     color: '#FF3B30',
     fontSize: 14,
     textAlign: 'center',
+    marginTop: 12,
+    fontWeight: 'bold',
   },
 });

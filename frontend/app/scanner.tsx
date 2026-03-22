@@ -102,8 +102,8 @@ export default function UserScannerScreen() {
     if (scanned || loading) return;
     setScanned(true);
 
-    // Validate that it looks like a MongoDB ObjectId
-    if (!/^[a-fA-F0-9]{24}$/.test(data)) {
+    // Validate that it's a 6-digit room ID
+    if (!/^\d{6}$/.test(data)) {
       Alert.alert('Invalid QR Code', 'This QR code does not contain a valid room ID.');
       setScanned(false);
       return;
