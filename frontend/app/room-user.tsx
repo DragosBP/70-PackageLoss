@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -21,6 +22,20 @@ const COLOR_BORDER = '#3A3A3A';
 const COLOR_DIM = '#666666';
 const COLOR_DARKER = '#2A2A2A';
 const COLOR_GOLD = '#FFD700';
+
+// Helper for cross-platform confirmation
+const confirmAction = (title: string, message: string, onConfirm: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Confirm', style: 'destructive', onPress: onConfirm },
+    ]);
+  }
+};
 
 export default function RoomUserScreen() {
   const router = useRouter();
@@ -93,27 +108,20 @@ export default function RoomUserScreen() {
 
   const handleLeaveRoom = async () => {
     if (!params.roomId || !userId) return;
-    Alert.alert(
+    confirmAction(
       'Leave Room',
       'Are you sure you want to leave this party?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            setActionLoading(true);
-            try {
-              await roomAPI.leaveRoom(params.roomId, userId);
-              router.replace('/');
-            } catch (error) {
-              Alert.alert('Error', handleApiError(error));
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ]
+      async () => {
+        setActionLoading(true);
+        try {
+          await roomAPI.leaveRoom(params.roomId, userId);
+          router.replace('/');
+        } catch (error) {
+          Alert.alert('Error', handleApiError(error));
+        } finally {
+          setActionLoading(false);
+        }
+      }
     );
   };
 

@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Pressable,
   Alert,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { roomAPI, handleApiError, Room } from '../utils/api';
@@ -19,6 +20,20 @@ const COLOR_DARK = '#1A1A1A';
 const COLOR_BORDER = '#3A3A3A';
 const COLOR_DIM = '#666666';
 const COLOR_DARKER = '#2A2A2A';
+
+// Helper for cross-platform confirmation
+const confirmAction = (title: string, message: string, onConfirm: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Confirm', style: 'destructive', onPress: onConfirm },
+    ]);
+  }
+};
 
 export default function RoomLobbyScreen() {
   const router = useRouter();
@@ -86,27 +101,20 @@ export default function RoomLobbyScreen() {
 
   const handleLeaveRoom = async () => {
     if (!roomId || !userId) return;
-    Alert.alert(
+    confirmAction(
       'Leave Room',
       'Are you sure you want to leave?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            setActionLoading(true);
-            try {
-              await roomAPI.leaveRoom(roomId, userId);
-              router.replace('/');
-            } catch (error) {
-              Alert.alert('Error', handleApiError(error));
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ]
+      async () => {
+        setActionLoading(true);
+        try {
+          await roomAPI.leaveRoom(roomId, userId);
+          router.replace('/');
+        } catch (error) {
+          Alert.alert('Error', handleApiError(error));
+        } finally {
+          setActionLoading(false);
+        }
+      }
     );
   };
 

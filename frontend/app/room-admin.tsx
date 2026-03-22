@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -21,6 +21,20 @@ const COLOR_DARK = '#1A1A1A';
 const COLOR_BORDER = '#3A3A3A';
 const COLOR_DIM = '#666666';
 const COLOR_DARKER = '#2A2A2A';
+
+// Helper for cross-platform confirmation
+const confirmAction = (title: string, message: string, onConfirm: () => void) => {
+  if (Platform.OS === 'web') {
+    if (window.confirm(`${title}\n\n${message}`)) {
+      onConfirm();
+    }
+  } else {
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Confirm', style: 'destructive', onPress: onConfirm },
+    ]);
+  }
+};
 
 export default function RoomAdminScreen() {
   const router = useRouter();
@@ -89,27 +103,20 @@ export default function RoomAdminScreen() {
 
   const handleEndParty = async () => {
     if (!roomId || !nickname) return;
-    Alert.alert(
+    confirmAction(
       'End Party',
       'Are you sure you want to end this party? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'End Party',
-          style: 'destructive',
-          onPress: async () => {
-            setActionLoading(true);
-            try {
-              await roomAPI.endRoom(roomId, nickname as string);
-              router.replace('/');
-            } catch (error) {
-              Alert.alert('Error', handleApiError(error));
-            } finally {
-              setActionLoading(false);
-            }
-          },
-        },
-      ]
+      async () => {
+        setActionLoading(true);
+        try {
+          await roomAPI.endRoom(roomId, nickname as string);
+          router.replace('/');
+        } catch (error) {
+          Alert.alert('Error', handleApiError(error));
+        } finally {
+          setActionLoading(false);
+        }
+      }
     );
   };
 
