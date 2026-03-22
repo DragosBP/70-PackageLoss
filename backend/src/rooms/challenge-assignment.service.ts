@@ -77,7 +77,7 @@ export class ChallengeAssignmentService {
           last_challenge_regeneration: now,
           next_challenge_regeneration: nextRegen,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 
@@ -118,7 +118,7 @@ export class ChallengeAssignmentService {
           game_started: false,
           next_challenge_regeneration: null,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 
@@ -176,7 +176,7 @@ export class ChallengeAssignmentService {
           last_challenge_regeneration: now,
           next_challenge_regeneration: nextRegen,
         },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 
@@ -222,7 +222,7 @@ export class ChallengeAssignmentService {
       .findByIdAndUpdate(
         cleanRoomId,
         { participants: room.participants },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 

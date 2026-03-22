@@ -123,7 +123,7 @@ export class RoomsService {
 
     const room = await this.roomModel
       .findByIdAndUpdate(cleanId, updatePayload, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec();
@@ -201,7 +201,7 @@ export class RoomsService {
       .findOneAndUpdate(
         { _id: cleanId, 'participants.user_id': { $ne: user_id } },
         { $push: { participants: newParticipant } },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
       .exec();
 

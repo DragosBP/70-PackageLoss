@@ -1,5 +1,4 @@
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { firebaseStorage } from './firebase';
@@ -21,10 +20,12 @@ async function compressToSize(uri: string, maxBytes: number): Promise<string> {
       },
     );
 
-    const fileInfo = await FileSystem.getInfoAsync(manipulated.uri);
+    // Check blob size instead of file system (works on web and native)
+    const response = await fetch(manipulated.uri);
+    const blob = await response.blob();
 
     lastResultUri = manipulated.uri;
-    if (fileInfo.exists && typeof fileInfo.size === 'number' && fileInfo.size <= maxBytes) {
+    if (blob.size <= maxBytes) {
       return manipulated.uri;
     }
 

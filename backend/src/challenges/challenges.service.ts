@@ -44,7 +44,7 @@ export class ChallengesService {
 
     const challenge = await this.challengeModel
       .findByIdAndUpdate(id, updateChallengeDto, {
-        new: true,
+        returnDocument: 'after',
         runValidators: true,
       })
       .exec();
