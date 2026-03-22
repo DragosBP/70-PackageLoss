@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +18,7 @@ import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
 import { AnimatedQRDropdown } from '../components/animated-qr-dropdown';
 import { ChallengeCard } from '../components/ChallengeCard';
 import { ConfirmationModal } from '../components/ConfirmationModal';
-import * as Clipboard from 'expo-clipboard';
+import { scheduleLocalChallengeAssignedNotification } from '../services/notifications';
 
 const COLOR_RED = '#E63946';
 const COLOR_GREEN = '#34C759';
@@ -43,6 +43,7 @@ export default function RoomAdminScreen() {
   const [showQR, setShowQR] = useState(false);
   const [viewMode, setViewMode] = useState<'admin' | 'user'>('admin');
   const [adminChallengeStatus, setAdminChallengeStatus] = useState<ChallengeStatus | null>(null);
+  const lastAdminChallengeKeyRef = useRef<string | null>(null);
 
   // Toast state
   const [toastOpacity] = useState(new Animated.Value(0));
@@ -67,14 +68,41 @@ export default function RoomAdminScreen() {
         if (userId) {
           try {
             const adminStatusResponse = await roomAPI.getChallengeStatus(roomId, userId);
-            setAdminChallengeStatus(adminStatusResponse.data);
+            const nextStatus = adminStatusResponse.data;
+            const challengeId = nextStatus.assigned_challenge?._id;
+            const challengeAssignedAt = nextStatus.challenge_assigned_at;
+            const nextChallengeKey = challengeId && challengeAssignedAt
+              ? `${challengeId}:${challengeAssignedAt}`
+              : null;
+
+            if (
+              nextChallengeKey &&
+              lastAdminChallengeKeyRef.current &&
+              nextChallengeKey !== lastAdminChallengeKeyRef.current
+            ) {
+              void scheduleLocalChallengeAssignedNotification({
+                challengeTitle: nextStatus.assigned_challenge?.title,
+                challengeDescription: nextStatus.assigned_challenge?.description,
+                targetNickname: nextStatus.target_nickname || undefined,
+              });
+            }
+
+            if (nextChallengeKey && !lastAdminChallengeKeyRef.current) {
+              lastAdminChallengeKeyRef.current = nextChallengeKey;
+            } else if (nextChallengeKey) {
+              lastAdminChallengeKeyRef.current = nextChallengeKey;
+            }
+
+            setAdminChallengeStatus(nextStatus);
           } catch {
-            setAdminChallengeStatus(null);
+            setAdminChallengeStatus(null); // Admin might not have challenge assigned yet
+            lastAdminChallengeKeyRef.current = null;
           }
         }
       } else {
         setChallengeStatuses([]);
         setAdminChallengeStatus(null);
+        lastAdminChallengeKeyRef.current = null;
       }
     } catch (error) {
       console.error('Error fetching room data:', error);

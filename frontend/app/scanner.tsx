@@ -13,7 +13,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { roomAPI, handleApiError } from '../utils/api';
 import { getOrCreateUserId } from '../services/identity';
 import { getNativePushToken } from '../services/notifications';
-import { uploadProfileImage } from '../services/storage';
+import { getProfileImageBase64, uploadProfileImage } from '../services/storage';
 
 const COLOR_RED = '#E63946';
 const COLOR_WHITE = '#FFFFFF';
@@ -38,12 +38,17 @@ export default function UserScannerScreen() {
 
       // Upload image to Firebase Storage if present
       let pfp_url = '';
+      let pfp_base64 = '';
       if (params.mugshot) {
         try {
           pfp_url = await uploadProfileImage(roomId, userId, params.mugshot);
         } catch (uploadError) {
           console.error('Failed to upload profile image:', uploadError);
-          // Continue without image if upload fails
+          try {
+            pfp_base64 = await getProfileImageBase64(params.mugshot);
+          } catch (base64Error) {
+            console.error('Failed to generate base64 profile image fallback:', base64Error);
+          }
         }
       }
 
@@ -51,7 +56,7 @@ export default function UserScannerScreen() {
         user_id: userId,
         nickname: userNickname,
         pfp_url: pfp_url,
-        pfp_base64: '', // Keep for backward compatibility
+        pfp_base64,
         fcm_token: fcmToken || '',
       });
 
@@ -61,7 +66,7 @@ export default function UserScannerScreen() {
           roomId: roomId,
           nickname: userNickname,
           userId: userId,
-          mugshot: pfp_url || params.mugshot || '',
+          mugshot: pfp_url || pfp_base64 || params.mugshot || '',
         },
       });
     } catch (error) {
