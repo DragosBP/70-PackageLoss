@@ -41,8 +41,11 @@ export class Participant {
 
 export const ParticipantSchema = SchemaFactory.createForClass(Participant);
 
-@Schema({ collection: 'rooms' })
+@Schema({ collection: 'rooms', _id: false }) // IMPORTANT: _id: false pentru ID custom
 export class Room {
+  @Prop({ type: String }) // Aici vine codul de 6 cifre
+  _id: string;
+
   @Prop({ required: true, trim: true })
   room_name: string;
 
@@ -61,18 +64,11 @@ export class Room {
   @Prop({ type: [String], default: [] })
   active_alerts: string[];
 
-  // Game timer fields for per-room challenge regeneration
   @Prop({ default: false })
   game_started: boolean;
 
   @Prop({ type: Date, default: null })
   game_started_at: Date | null;
-
-  @Prop({ type: Date, default: null })
-  last_challenge_regeneration: Date | null;
-
-  @Prop({ type: Date, default: null })
-  next_challenge_regeneration: Date | null;
 }
 
 export const RoomSchema = SchemaFactory.createForClass(Room);

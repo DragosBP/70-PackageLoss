@@ -1,10 +1,6 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model } from 'mongoose';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { Room, RoomDocument } from './schemas/room.schema';
@@ -20,9 +16,9 @@ export class RoomsService {
   ) {}
 
   async create(createRoomDto: CreateRoomDto): Promise<Room> {
-    // 1. Logica de fallback pentru cele 8 ore (dacă lipsește din DTO)
-    const expiresAt = createRoomDto.expires_at 
-      ? new Date(createRoomDto.expires_at) 
+    const shortId = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = createRoomDto.expires_at
+      ? new Date(createRoomDto.expires_at)
       : new Date(Date.now() + 8 * 60 * 60 * 1000);
 
     this.assertTtlLimit(expiresAt);
@@ -49,31 +45,44 @@ export class RoomsService {
       }));
 
     const room = new this.roomModel({
+      _id: shortId,
       ...createRoomDto,
       expires_at: expiresAt,
-      participants: participants,
+      participants,
     });
 
     return room.save();
-}
+  }
 
   async findAll(): Promise<Room[]> {
     return this.roomModel.find().exec();
   }
 
   async findOne(id: string): Promise<Room> {
-    this.assertValidObjectId(id);
-    const room = await this.roomModel.findById(id).exec();
+    const cleanId = id.replace(':', '').trim();
+    this.assertValidId(cleanId);
+    const room = await this.roomModel.findById(cleanId).exec();
+    if (!room) throw new NotFoundException(`Room with ID ${cleanId} not found`);
+    return room;
+  }
 
-    if (!room) {
-      throw new NotFoundException('Room not found');
-    }
+  async startGame(id: string): Promise<Room> {
+    const cleanId = id.replace(':', '').trim();
+    this.assertValidId(cleanId);
 
+    const room = await this.roomModel.findByIdAndUpdate(
+      cleanId,
+      { game_started: true, game_started_at: new Date() },
+      { new: true, runValidators: true },
+    ).exec();
+
+    if (!room) throw new NotFoundException(`Room ${cleanId} not found`);
     return room;
   }
 
   async update(id: string, updateRoomDto: UpdateRoomDto): Promise<Room> {
-    this.assertValidObjectId(id);
+    const cleanId = id.replace(':', '').trim();
+    this.assertValidId(cleanId);
 
     const updatePayload: {
       room_name?: string;
@@ -124,90 +133,69 @@ export class RoomsService {
     }
 
     const room = await this.roomModel
-      .findByIdAndUpdate(id, updatePayload, { new: true, runValidators: true })
+      .findByIdAndUpdate(cleanId, updatePayload, {
+        new: true,
+        runValidators: true,
+      })
       .exec();
+
+    if (!room) throw new NotFoundException('Room not found');
+    return room;
+  }
+
+  async endRoom(id: string, requestorNickname: string): Promise<Room | null> {
+    const cleanId = id.replace(':', '').trim();
+    this.assertValidId(cleanId);
+
+    const room = await this.roomModel.findById(cleanId).exec();
 
     if (!room) {
       throw new NotFoundException('Room not found');
     }
 
-    return room;
-  }
-
-  async endRoom(id: string, requestorNickname: string): Promise<Room | null> { // <--- Adaugă '| null' aici
-  this.assertValidObjectId(id);
-
-  const room = await this.roomModel.findById(id).exec();
-
-  if (!room) {
-    throw new NotFoundException('Room not found');
-  }
-
-  // Verificăm adminul
-  if (room.admin_nickname !== requestorNickname) {
-    throw new BadRequestException('Forbidden: Only the admin can end this party!');
-  }
-
-  // Clean up Firebase Storage images before deleting room
-  await this.notificationsService.deleteRoomImages(id);
-
-  // Executăm ștergerea
-  return this.roomModel.findByIdAndDelete(id).exec();
-}
-  async leaveRoom(roomId: string, userId: string): Promise<void> {
-  this.assertValidObjectId(roomId);
-
-  const result = await this.roomModel.updateOne(
-    { _id: roomId },
-    { $pull: { participants: { user_id: userId } } } // Îl scoate din array după UUID
-  ).exec();
-
-  if (result.matchedCount === 0) {
-    throw new NotFoundException('Room not found');
-  }
-}
-  private assertTtlLimit(expiresAt: Date): void {
-    if (Number.isNaN(expiresAt.getTime())) {
-      throw new BadRequestException('expires_at must be a valid date');
+    if (room.admin_nickname !== requestorNickname) {
+      throw new BadRequestException('Forbidden: Only the admin can end this party!');
     }
 
-    const ttl = expiresAt.getTime() - Date.now();
-    if (ttl <= 0) {
-      throw new BadRequestException('expires_at must be in the future');
-    }
+    // Clean up Firebase Storage images before deleting room.
+    await this.notificationsService.deleteRoomImages(cleanId);
 
-    if (ttl > RoomsService.MAX_TTL_MS) {
-      throw new BadRequestException('Room TTL cannot exceed 48 hours');
+    return this.roomModel.findByIdAndDelete(cleanId).exec();
+  }
+
+  async leaveRoom(id: string, userId: string): Promise<void> {
+    const cleanId = id.replace(':', '').trim();
+    this.assertValidId(cleanId);
+
+    const result = await this.roomModel.updateOne(
+      { _id: cleanId },
+      { $pull: { participants: { user_id: userId } } },
+    ).exec();
+
+    if (result.matchedCount === 0) {
+      throw new NotFoundException('Room not found');
     }
   }
 
-  private assertValidObjectId(id: string): void {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid room id');
-    }
-  }
   async joinRoom(id: string, participantData: any): Promise<Room> {
-    // 1. Validăm ID-ul camerei (folosind metoda ta existentă)
-    this.assertValidObjectId(id);
+    const cleanId = id.replace(':', '').trim();
+    this.assertValidId(cleanId);
 
     const { user_id } = participantData;
     if (!user_id) {
       throw new BadRequestException('user_id is required');
     }
 
-    // 2. Verificăm dacă UUID-ul este deja într-o cameră ACTIVĂ (care nu a expirat)
-    // Deoarece avem index TTL, MongoDB va returna doar documentele care încă există
-    const existingActiveRoom = await this.roomModel
+    const existingRoom = await this.roomModel
       .findOne({ 'participants.user_id': user_id })
       .exec();
 
-    if (existingActiveRoom) {
-      if (existingActiveRoom._id.toString() === id) {
-        return existingActiveRoom;
+    if (existingRoom) {
+      if (existingRoom._id.toString() === cleanId) {
+        return existingRoom;
       }
-      throw new BadRequestException(
-        `User is already participating in another active room: ${existingActiveRoom.room_name}`,
-      );
+
+      throw new BadRequestException(`User already in another room: ${existingRoom.room_name}`);
     }
 
     const newParticipant = {
@@ -222,7 +210,7 @@ export class RoomsService {
     // Atomic update: only push if user_id doesn't already exist in this room.
     const updatedRoom = await this.roomModel
       .findOneAndUpdate(
-        { _id: id, 'participants.user_id': { $ne: user_id } },
+        { _id: cleanId, 'participants.user_id': { $ne: user_id } },
         { $push: { participants: newParticipant } },
         { new: true, runValidators: true },
       )
@@ -233,17 +221,38 @@ export class RoomsService {
     }
 
     // If atomic update did not match, either room doesn't exist or user is already in it.
-    const existingRoom = await this.roomModel.findById(id).exec();
+    const roomAfterUpdate = await this.roomModel.findById(cleanId).exec();
 
-    if (!existingRoom) {
+    if (!roomAfterUpdate) {
       throw new NotFoundException('Room not found');
     }
 
-    if (existingRoom.participants.some((participant) => participant.user_id === user_id)) {
-      return existingRoom;
+    if (roomAfterUpdate.participants.some((participant) => participant.user_id === user_id)) {
+      return roomAfterUpdate;
     }
 
     throw new BadRequestException('Unable to join room');
   }
-  
+
+  private assertValidId(id: string): void {
+    if (!/^\d+$/.test(id)) {
+      throw new BadRequestException(`ID-ul [${id}] nu este valid. Folosește doar cifre.`);
+    }
+  }
+
+  private assertTtlLimit(expiresAt: Date): void {
+    if (Number.isNaN(expiresAt.getTime())) {
+      throw new BadRequestException('expires_at must be a valid date');
+    }
+
+    const ttl = expiresAt.getTime() - Date.now();
+
+    if (ttl <= 0) {
+      throw new BadRequestException('expires_at must be in the future');
+    }
+
+    if (ttl > RoomsService.MAX_TTL_MS) {
+      throw new BadRequestException('Room TTL cannot exceed 48 hours');
+    }
+  }
 }

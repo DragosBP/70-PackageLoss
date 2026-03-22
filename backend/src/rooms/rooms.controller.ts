@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Query,
-  Get,
-  Param,
-  Patch,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Query, Get, Param, Patch, Post } from '@nestjs/common';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { RoomsService } from './rooms.service';
@@ -16,34 +7,30 @@ import { RoomsService } from './rooms.service';
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
-  // --- ACȚIUNI SPECIFICE (Trebuie să fie SUS pentru a evita conflicte) ---
+  // --- ACȚIUNI SPECIFICE ---
 
-  // RUTA: DELETE /rooms/action/end/:id?nickname=...
+  @Post(':id/start-game')
+  async startGame(@Param('id') id: string) {
+    const cleanId = id.replace(':', '').trim();
+    return this.roomsService.startGame(cleanId);
+  }
+
   @Delete('action/end/:id')
-  async endRoom(
-    @Param('id') id: string, 
-    @Query('nickname') nickname: string
-  ) {
-    console.log(`Request to end room ${id} by ${nickname}`);
-    return this.roomsService.endRoom(id, nickname);
+  async endRoom(@Param('id') id: string, @Query('nickname') nickname: string) {
+    const cleanId = id.replace(':', '').trim();
+    return this.roomsService.endRoom(cleanId, nickname);
   }
 
-  // RUTA: DELETE /rooms/action/leave/:id/:userId
   @Delete('action/leave/:id/:userId')
-  async leave(
-    @Param('id') id: string, 
-    @Param('userId') userId: string
-  ) {
-    return this.roomsService.leaveRoom(id, userId);
+  async leave(@Param('id') id: string, @Param('userId') userId: string) {
+    const cleanId = id.replace(':', '').trim();
+    return this.roomsService.leaveRoom(cleanId, userId);
   }
 
-  // RUTA: POST /rooms/action/join/:id
   @Post('action/join/:id')
-  async join(
-    @Param('id') id: string, 
-    @Body() participantDto: any
-  ) {
-    return this.roomsService.joinRoom(id, participantDto);
+  async join(@Param('id') id: string, @Body() participantDto: any) {
+    const cleanId = id.replace(':', '').trim();
+    return this.roomsService.joinRoom(cleanId, participantDto);
   }
 
   // --- CRUD STANDARD ---
@@ -60,11 +47,13 @@ export class RoomsController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.roomsService.findOne(id);
+    const cleanId = id.replace(':', '').trim();
+    return this.roomsService.findOne(cleanId);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateRoomDto: UpdateRoomDto) {
-    return this.roomsService.update(id, updateRoomDto);
+    const cleanId = id.replace(':', '').trim();
+    return this.roomsService.update(cleanId, updateRoomDto);
   }
 }

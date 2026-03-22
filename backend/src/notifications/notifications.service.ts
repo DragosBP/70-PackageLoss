@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { ServiceAccount } from 'firebase-admin';
 import { Bucket } from '@google-cloud/storage';
+import * as path from 'path';
 
 @Injectable()
 export class NotificationsService implements OnModuleInit {
@@ -10,11 +11,12 @@ export class NotificationsService implements OnModuleInit {
   private bucket: Bucket | null = null;
 
   onModuleInit() {
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+    const rawServiceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+    
     const storageBucket =
       process.env.FIREBASE_STORAGE_BUCKET || 'beefapp-86cb5.firebasestorage.app';
 
-    if (!serviceAccountPath) {
+    if (!rawServiceAccountPath) {
       this.logger.warn(
         'FIREBASE_SERVICE_ACCOUNT_PATH not set. Push notifications and storage cleanup will be disabled.',
       );
@@ -22,6 +24,12 @@ export class NotificationsService implements OnModuleInit {
     }
 
     try {
+      // Support both quoted and unquoted values in .env and resolve relative paths from app root.
+      const normalizedPath = rawServiceAccountPath.trim().replace(/^['\"]|['\"]$/g, '');
+      const serviceAccountPath = path.isAbsolute(normalizedPath)
+        ? normalizedPath
+        : path.resolve(process.cwd(), normalizedPath);
+
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const serviceAccount = require(serviceAccountPath) as ServiceAccount;
 

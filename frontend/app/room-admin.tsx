@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
+import { AnimatedQRDropdown } from '../components/animated-qr-dropdown';
 import { ChallengeCard } from '../components/ChallengeCard';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 
@@ -27,10 +28,9 @@ const COLOR_DARKER = '#2A2A2A';
 
 export default function RoomAdminScreen() {
   const router = useRouter();
-  const { roomId, nickname, userId } = useLocalSearchParams<{
+  const { roomId, nickname } = useLocalSearchParams<{
     roomId: string;
     nickname: string;
-    userId: string;
   }>();
 
   const [room, setRoom] = useState<Room | null>(null);
@@ -196,6 +196,18 @@ export default function RoomAdminScreen() {
           <Text style={styles.roomId}>ID: {roomId}</Text>
         </View>
 
+<<<<<<< HEAD
+        <Pressable style={styles.qrToggle} onPress={() => setShowQR(!showQR)}>
+          <Text style={styles.qrToggleText}>
+            {showQR ? '▼ Hide QR Code' : '▶ Show QR Code to Join'}
+          </Text>
+        </Pressable>
+
+        <AnimatedQRDropdown isOpen={showQR}>
+          <QRCode value={roomId} size={200} color="black" backgroundColor="white" />
+          <Text style={styles.qrHint}>Scan to join the party</Text>
+        </AnimatedQRDropdown>
+=======
         {room.game_started && (
           <View style={styles.viewToggleContainer}>
             <Pressable
@@ -214,6 +226,7 @@ export default function RoomAdminScreen() {
             </Pressable>
           </View>
         )}
+>>>>>>> da73e7b3a690292d4caf98254c6c754fe593f21e
 
         {/* Conditional view rendering */}
         {viewMode === 'admin' ? (
