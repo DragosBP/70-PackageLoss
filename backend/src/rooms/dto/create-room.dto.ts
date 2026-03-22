@@ -47,6 +47,7 @@ export class CreateRoomDto {
   admin_nickname!: string;
 
   @IsDateString()
+  @IsOptional()
   expires_at!: string;
 
   @IsOptional()
