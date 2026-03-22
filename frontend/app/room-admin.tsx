@@ -11,12 +11,14 @@ import {
   Text,
   View,
   Dimensions,
+  Animated,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
 import { AnimatedQRDropdown } from '../components/animated-qr-dropdown';
 import { ChallengeCard } from '../components/ChallengeCard';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import * as Clipboard from 'expo-clipboard';
 
 const COLOR_RED = '#E63946';
 const COLOR_GREEN = '#34C759';
@@ -34,6 +36,9 @@ export default function RoomAdminScreen() {
     userId?: string;
   }>();
 
+  const [toastMessage, setToastMessage] = useState(''); // Added state for toast message
+  const [toastVisible, setToastVisible] = useState(false); // Ensure toast visibility is managed
+  const [toastOpacity] = useState(new Animated.Value(0)); // Ensure opacity is animated
   const [room, setRoom] = useState<Room | null>(null);
   const [challengeStatuses, setChallengeStatuses] = useState<ChallengeStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,6 +157,22 @@ export default function RoomAdminScreen() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const showToast = (message: string) => {
+    setToastMessage(message); // Set the message to display
+    setToastVisible(true);
+    Animated.sequence([
+      Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.delay(1500),
+      Animated.timing(toastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start(() => setToastVisible(false));
+  };
+
+  const handleCopyCode = async () => {
+    if (!roomId) return;
+    await Clipboard.setStringAsync(roomId as string);
+    showToast('Room code copied to clipboard!'); // Pass message to toast
   };
 
   if (loading) {
@@ -283,6 +304,17 @@ export default function RoomAdminScreen() {
               <Text style={styles.sectionTitle}>GAME CONTROLS</Text>
 
               {!room.game_started ? (
+                <>
+                <Pressable
+                  style={[styles.actionButton, styles.startButton]}
+                  onPress={() => handleCopyCode()}
+                  disabled={actionLoading}>
+                  {actionLoading ? (
+                    <ActivityIndicator color={COLOR_WHITE} />
+                  ) : (
+                    <Text style={styles.actionButtonText}>Copy Code</Text>
+                  )}
+                </Pressable>
                 <Pressable
                   style={[styles.actionButton, styles.startButton]}
                   onPress={() => setStartGameConfirmVisible(true)}
@@ -293,6 +325,7 @@ export default function RoomAdminScreen() {
                     <Text style={styles.actionButtonText}>⚔ START GAME</Text>
                   )}
                 </Pressable>
+                </>
               ) : (
                 <>
                   <Pressable
@@ -605,5 +638,20 @@ const styles = StyleSheet.create({
   },
   activeToggleText: {
     color: COLOR_WHITE,
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 20,
+    left: '10%',
+    right: '10%',
+    backgroundColor: 'black',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    zIndex: 1000, // Ensure it appears above other elements
+  },
+  toastText: {
+    color: 'white',
+    fontSize: 14,
   },
 });
