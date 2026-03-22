@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "88132625917",
+    "project_id": "beefapp-86cb5",
+    "storage_bucket": "beefapp-86cb5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88132625917:android:009dfc499cda86ff6a6594",
+        "android_client_info": {
+          "package_name": "lsac.it.hack"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCCH-FlLEiAcxed-0wPpA4pyH2Pe8YBGYI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
