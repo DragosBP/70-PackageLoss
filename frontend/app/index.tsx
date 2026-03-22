@@ -120,7 +120,7 @@ export default function HomeScreen() {
     try {
       const userId = await getOrCreateUserId();
 
-      const response = await roomAPI.joinRoom(roomCode.trim(), {
+      await roomAPI.joinRoom(roomCode.trim(), {
         user_id: userId,
         nickname: nickname,
         pfp_base64: mugshot || '',
@@ -198,9 +198,7 @@ export default function HomeScreen() {
             {loading ? (
               <ActivityIndicator color={COLOR_WHITE} size="small" />
             ) : (
-              <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                <Text style={styles.createButtonText}>⚔ CREATE NEW BEEF</Text>
-              </Animated.View>
+              <Text style={styles.createButtonText}>⚔ CREATE NEW BEEF</Text>
             )}
           </Pressable>
 

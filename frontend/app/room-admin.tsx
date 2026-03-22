@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { roomAPI, handleApiError, Room, ChallengeStatus } from '../utils/api';
+import { AnimatedQRDropdown } from '../components/animated-qr-dropdown';
 
 const COLOR_RED = '#E63946';
 const COLOR_GREEN = '#34C759';
@@ -38,10 +39,9 @@ const confirmAction = (title: string, message: string, onConfirm: () => void) =>
 
 export default function RoomAdminScreen() {
   const router = useRouter();
-  const { roomId, nickname, userId } = useLocalSearchParams<{
+  const { roomId, nickname } = useLocalSearchParams<{
     roomId: string;
     nickname: string;
-    userId: string;
   }>();
 
   const [room, setRoom] = useState<Room | null>(null);
@@ -183,12 +183,10 @@ export default function RoomAdminScreen() {
           </Text>
         </Pressable>
 
-        {showQR && (
-          <View style={styles.qrContainer}>
-            <QRCode value={roomId} size={200} color="black" backgroundColor="white" />
-            <Text style={styles.qrHint}>Scan to join the party</Text>
-          </View>
-        )}
+        <AnimatedQRDropdown isOpen={showQR}>
+          <QRCode value={roomId} size={200} color="black" backgroundColor="white" />
+          <Text style={styles.qrHint}>Scan to join the party</Text>
+        </AnimatedQRDropdown>
 
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
